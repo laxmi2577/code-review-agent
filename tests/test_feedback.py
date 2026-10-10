@@ -5,20 +5,23 @@ from unittest.mock import MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-from src.api.reviews import generate_manual_review
 from src.config import Settings
 from src.main import create_app
 from src.models.enums import ReviewSeverity
-from src.models.schemas import FeedbackEvent, ReviewComment
+from src.models.schemas import ReviewComment
 
 
 @pytest.fixture
 def temp_env(tmp_path: Path):
     feedback_file = tmp_path / "feedback" / "reactions.jsonl"
-    cfg = Settings(_env_file=None, feedback_store_path=str(feedback_file), gemini_api_key="mock-key")
-    with patch("src.api.feedback.get_settings", return_value=cfg), patch(
-        "src.api.reviews.get_settings", return_value=cfg
-    ), patch("src.config.get_settings", return_value=cfg):
+    cfg = Settings(
+        _env_file=None, feedback_store_path=str(feedback_file), gemini_api_key="mock-key"
+    )
+    with (
+        patch("src.api.feedback.get_settings", return_value=cfg),
+        patch("src.api.reviews.get_settings", return_value=cfg),
+        patch("src.config.get_settings", return_value=cfg),
+    ):
         app = create_app()
         yield TestClient(app), feedback_file
 

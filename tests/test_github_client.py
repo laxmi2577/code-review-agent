@@ -1,4 +1,5 @@
 from unittest.mock import MagicMock, patch
+
 import pytest
 from github import GithubException, RateLimitExceededException
 
@@ -68,7 +69,9 @@ def test_post_review_comments_batch(sample_comment: ReviewComment):
     client = GitHubClient(token="mock-token")
 
     with patch.object(client, "post_single_comment", return_value=101):
-        ids = client.post_review_comments("owner/repo", 42, "sha123", [sample_comment, sample_comment])
+        ids = client.post_review_comments(
+            "owner/repo", 42, "sha123", [sample_comment, sample_comment]
+        )
         assert ids == [101, 101]
 
 
@@ -77,7 +80,9 @@ def test_retry_on_rate_limit(sample_comment: ReviewComment):
 
     mock_op = MagicMock()
     mock_op.side_effect = [
-        RateLimitExceededException(status=403, data={"message": "Rate limit exceeded"}, headers=None),
+        RateLimitExceededException(
+            status=403, data={"message": "Rate limit exceeded"}, headers=None
+        ),
         "success_result",
     ]
 

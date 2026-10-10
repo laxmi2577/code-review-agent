@@ -21,12 +21,12 @@ def secret() -> str:
 @pytest.fixture
 def test_client(secret: str):
     cfg = Settings(github_webhook_secret=secret, gemini_api_key="mock-key")
-    with patch("src.api.webhooks.get_settings", return_value=cfg), patch(
-        "src.config.get_settings", return_value=cfg
+    with (
+        patch("src.api.webhooks.get_settings", return_value=cfg),
+        patch("src.config.get_settings", return_value=cfg),
     ):
         app = create_app()
         yield TestClient(app)
-
 
 
 def sign_payload(payload: dict, secret: str) -> tuple[bytes, str]:
@@ -109,16 +109,16 @@ def test_webhook_full_pipeline_success(test_client: TestClient, secret: str):
         "+    return 42\n"
     )
 
-    with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get, patch(
-        "src.api.webhooks.process_pr_review_pipeline"
-    ) as mock_pipeline:
+    with (
+        patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get,
+        patch("src.api.webhooks.process_pr_review_pipeline") as mock_pipeline,
+    ):
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.text = diff_fixture
         mock_get.return_value = mock_resp
 
         mock_pipeline.return_value = [101]
-
 
         response = test_client.post(
             "/webhook/github",

@@ -1,11 +1,12 @@
 import json
 from unittest.mock import MagicMock, patch
+
 import pytest
 
 from src.config import Settings
 from src.core.reviewer import GeminiReviewer
 from src.models.enums import ChangeType, Language, ReviewSeverity
-from src.models.schemas import DiffHunk, FunctionNode, RetrievalResult, ReviewComment
+from src.models.schemas import DiffHunk, FunctionNode, RetrievalResult
 
 
 @pytest.fixture
@@ -46,7 +47,9 @@ def sample_retrieval_result() -> RetrievalResult:
     )
 
 
-def test_build_prompt_structure(sample_diff_hunk: DiffHunk, sample_retrieval_result: RetrievalResult):
+def test_build_prompt_structure(
+    sample_diff_hunk: DiffHunk, sample_retrieval_result: RetrievalResult
+):
     reviewer = GeminiReviewer(settings=Settings(gemini_api_key="mock-key"))
     prompt = reviewer.build_prompt([sample_diff_hunk], [sample_retrieval_result])
 

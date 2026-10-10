@@ -1,4 +1,4 @@
-from typing import Optional
+
 from pydantic import BaseModel, Field
 
 from src.models.enums import ChangeType, Language, ReviewSeverity
@@ -7,12 +7,12 @@ from src.models.enums import ChangeType, Language, ReviewSeverity
 class FunctionNode(BaseModel):
     file_path: str
     function_name: str
-    class_name: Optional[str] = None
+    class_name: str | None = None
     language: Language
     start_line: int
     end_line: int
     code_snippet: str
-    embedding_id: Optional[str] = None
+    embedding_id: str | None = None
 
 
 class DiffHunk(BaseModel):

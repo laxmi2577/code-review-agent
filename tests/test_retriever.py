@@ -9,7 +9,6 @@ from src.core.retriever import CodeRetriever
 from src.models.enums import ChangeType, Language
 from src.models.schemas import DiffHunk, FunctionNode, RetrievalResult
 from src.services.index_manager import IndexManager
-from src.services.storage_client import StorageClient
 
 
 @pytest.fixture

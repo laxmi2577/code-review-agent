@@ -1,6 +1,6 @@
 import os
 import time
-from typing import Optional
+
 from fastapi import APIRouter
 from pydantic import BaseModel
 
@@ -12,7 +12,7 @@ router = APIRouter(tags=["Health"])
 class HealthResponse(BaseModel):
     status: str
     index_loaded: bool
-    index_age_seconds: Optional[int] = None
+    index_age_seconds: int | None = None
 
 
 @router.get("/health", response_model=HealthResponse)

@@ -36,4 +36,3 @@ def test_root_endpoint():
     assert data["name"] == "CodeLens"
     assert data["status"] == "online"
     assert data["docs"] == "/docs"
-

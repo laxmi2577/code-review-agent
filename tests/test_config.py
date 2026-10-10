@@ -22,7 +22,6 @@ def test_custom_settings_via_env(monkeypatch):
     assert custom_settings.gemini_api_key == "gemini_key_456"
 
 
-
 def test_get_settings_singleton():
     s1 = get_settings()
     s2 = get_settings()

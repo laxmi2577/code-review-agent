@@ -1,6 +1,6 @@
 import logging
 import time
-from typing import Any, Optional
+from typing import Any
 
 from github import Auth, Github, GithubException, RateLimitExceededException
 
@@ -15,8 +15,8 @@ class GitHubClient:
 
     def __init__(
         self,
-        settings: Optional[Settings] = None,
-        token: Optional[str] = None,
+        settings: Settings | None = None,
+        token: str | None = None,
         max_retries: int = 3,
         backoff_factor: float = 1.0,
     ):
@@ -29,12 +29,16 @@ class GitHubClient:
             auth = Auth.Token(self.token)
             self.gh = Github(auth=auth)
         else:
-            logger.warning("GitHubClient initialized without token. Unauthenticated rate limits will apply.")
+            logger.warning(
+                "GitHubClient initialized without token. Unauthenticated rate limits will apply."
+            )
             self.gh = Github()
 
     def get_pull_request(self, repo_full_name: str, pr_number: int):
         """Fetch repository and pull request instance with retry logic."""
-        return self._execute_with_retry(lambda: self.gh.get_repo(repo_full_name).get_pull(pr_number))
+        return self._execute_with_retry(
+            lambda: self.gh.get_repo(repo_full_name).get_pull(pr_number)
+        )
 
     def format_comment_body(self, comment: ReviewComment) -> str:
         """Format the markdown body for an inline review comment."""
@@ -61,7 +65,7 @@ class GitHubClient:
         pr_number: int,
         commit_id: str,
         comment: ReviewComment,
-    ) -> Optional[int]:
+    ) -> int | None:
         """Post a single review comment. Falls back to an issue comment if outside diff lines."""
         pull = self.get_pull_request(repo_full_name, pr_number)
         formatted_body = self.format_comment_body(comment)
@@ -76,7 +80,9 @@ class GitHubClient:
                     line=comment.end_line,
                 )
             )
-            logger.info("Posted inline review comment %s on %s#%d", created.id, repo_full_name, pr_number)
+            logger.info(
+                "Posted inline review comment %s on %s#%d", created.id, repo_full_name, pr_number
+            )
             return created.id
 
         except GithubException as exc:
@@ -91,7 +97,9 @@ class GitHubClient:
                     f"**[CodeLens Review]** on `{comment.file_path}` (lines {comment.start_line}–{comment.end_line}):\n\n"
                     f"{formatted_body}"
                 )
-                fallback_comment = self._execute_with_retry(lambda: pull.create_issue_comment(fallback_body))
+                fallback_comment = self._execute_with_retry(
+                    lambda: pull.create_issue_comment(fallback_body)
+                )
                 return fallback_comment.id
 
             logger.error("Failed to post comment to %s#%d: %s", repo_full_name, pr_number, exc)
@@ -126,14 +134,22 @@ class GitHubClient:
             try:
                 return operation()
             except RateLimitExceededException as exc:
-                wait_time = (self.backoff_factor * (2**attempt))
-                logger.warning("GitHub rate limit hit on attempt %d. Backing off for %.1fs...", attempt + 1, wait_time)
+                wait_time = self.backoff_factor * (2**attempt)
+                logger.warning(
+                    "GitHub rate limit hit on attempt %d. Backing off for %.1fs...",
+                    attempt + 1,
+                    wait_time,
+                )
                 time.sleep(wait_time)
                 last_exception = exc
             except GithubException as exc:
                 if exc.status == 403 and "rate limit" in str(exc.data).lower():
-                    wait_time = (self.backoff_factor * (2**attempt))
-                    logger.warning("GitHub 403 rate limit on attempt %d. Backing off for %.1fs...", attempt + 1, wait_time)
+                    wait_time = self.backoff_factor * (2**attempt)
+                    logger.warning(
+                        "GitHub 403 rate limit on attempt %d. Backing off for %.1fs...",
+                        attempt + 1,
+                        wait_time,
+                    )
                     time.sleep(wait_time)
                     last_exception = exc
                 else:

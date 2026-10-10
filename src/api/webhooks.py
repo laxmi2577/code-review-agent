@@ -1,7 +1,6 @@
 import json
 import logging
 import uuid
-from typing import Any, Optional
 
 import httpx
 from fastapi import APIRouter, Header, HTTPException, Request, status
@@ -21,7 +20,7 @@ logger = logging.getLogger("codelens.webhooks")
 router = APIRouter(prefix="/webhook", tags=["Webhooks"])
 
 # Singleton or injectable services
-_index_manager: Optional[IndexManager] = None
+_index_manager: IndexManager | None = None
 
 
 def get_index_manager() -> IndexManager:
@@ -35,20 +34,20 @@ def get_index_manager() -> IndexManager:
 
 class WebhookResponse(BaseModel):
     status: str
-    pr_number: Optional[int] = None
-    job_id: Optional[str] = None
-    comments_posted: Optional[int] = None
-    message: Optional[str] = None
+    pr_number: int | None = None
+    job_id: str | None = None
+    comments_posted: int | None = None
+    message: str | None = None
 
 
 def process_pr_review_pipeline(
     pr_event: PREvent,
-    diff_text: Optional[str] = None,
-    repo_path: Optional[str] = None,
-    settings: Optional[Settings] = None,
-    index_mgr: Optional[IndexManager] = None,
-    reviewer: Optional[GeminiReviewer] = None,
-    gh_client: Optional[GitHubClient] = None,
+    diff_text: str | None = None,
+    repo_path: str | None = None,
+    settings: Settings | None = None,
+    index_mgr: IndexManager | None = None,
+    reviewer: GeminiReviewer | None = None,
+    gh_client: GitHubClient | None = None,
 ) -> list[int]:
     """Execute the end-to-end PR review pipeline.
 
@@ -75,7 +74,9 @@ def process_pr_review_pipeline(
             logger.warning("Failed to extract git diff from repo %s: %s", repo_path, e)
 
     if not hunks:
-        logger.info("No parseable diff hunks for PR #%d in %s", pr_event.pr_number, pr_event.repo_full_name)
+        logger.info(
+            "No parseable diff hunks for PR #%d in %s", pr_event.pr_number, pr_event.repo_full_name
+        )
         return []
 
     # Stage 2: AST Parsing & Diff-to-AST Mapping
@@ -87,7 +88,7 @@ def process_pr_review_pipeline(
             if repo_path:
                 try:
                     full_p = f"{repo_path}/{hunk.file_path}"
-                    with open(full_p, "r", encoding="utf-8") as f:
+                    with open(full_p, encoding="utf-8") as f:
                         code = f.read()
                     nodes = ast_parser.extract_function_nodes(code, hunk.file_path, hunk.language)
                     functions_by_file[hunk.file_path] = nodes
@@ -122,15 +123,17 @@ def process_pr_review_pipeline(
 @router.post("/github", response_model=WebhookResponse, status_code=status.HTTP_200_OK)
 async def github_webhook_endpoint(
     request: Request,
-    x_github_event: Optional[str] = Header(None, alias="X-GitHub-Event"),
-    x_hub_signature_256: Optional[str] = Header(None, alias="X-Hub-Signature-256"),
+    x_github_event: str | None = Header(None, alias="X-GitHub-Event"),
+    x_hub_signature_256: str | None = Header(None, alias="X-Hub-Signature-256"),
 ) -> WebhookResponse:
     """Receive and process GitHub webhook notifications."""
     settings = get_settings()
     body_bytes = await request.body()
 
     # Verify HMAC signature
-    if not verify_webhook_signature(body_bytes, x_hub_signature_256 or "", settings.github_webhook_secret):
+    if not verify_webhook_signature(
+        body_bytes, x_hub_signature_256 or "", settings.github_webhook_secret
+    ):
         logger.warning("Rejected webhook: invalid HMAC signature")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -166,7 +169,9 @@ async def github_webhook_endpoint(
     )
 
     job_id = str(uuid.uuid4())
-    logger.info("Processing PR event: %s #%d (job: %s)", pr_event.repo_full_name, pr_event.pr_number, job_id)
+    logger.info(
+        "Processing PR event: %s #%d (job: %s)", pr_event.repo_full_name, pr_event.pr_number, job_id
+    )
 
     # Fetch diff text from diff_url if available
     diff_text = None

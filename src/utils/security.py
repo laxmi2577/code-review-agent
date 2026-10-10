@@ -1,11 +1,10 @@
 import hashlib
 import hmac
-from typing import Optional
 
 
 def verify_webhook_signature(
     payload_bytes: bytes,
-    signature_header: Optional[str],
+    signature_header: str | None,
     secret: str,
 ) -> bool:
     """Verify GitHub webhook signature using HMAC-SHA256.

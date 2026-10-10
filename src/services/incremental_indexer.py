@@ -1,7 +1,7 @@
 import json
 import logging
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, Optional, Union
 
 import faiss
 import numpy as np
@@ -10,7 +10,7 @@ from src.config import Settings, get_settings
 from src.core.ast_parser import ASTParser
 from src.core.diff_parser import extract_diff_from_repo, map_diff_to_functions
 from src.models.enums import ChangeType
-from src.models.schemas import DiffHunk, FunctionNode
+from src.models.schemas import DiffHunk
 from src.services.index_manager import IndexManager
 from src.services.storage_client import StorageClient
 
@@ -23,8 +23,8 @@ class IncrementalIndexer:
     def __init__(
         self,
         index_manager: IndexManager,
-        storage_client: Optional[StorageClient] = None,
-        settings: Optional[Settings] = None,
+        storage_client: StorageClient | None = None,
+        settings: Settings | None = None,
     ):
         self.settings = settings or get_settings()
         self.index_manager = index_manager
@@ -33,8 +33,8 @@ class IncrementalIndexer:
     def update_for_diff_hunks(
         self,
         diff_hunks: list[DiffHunk],
-        embed_fn: Optional[Callable[[list[str]], np.ndarray]] = None,
-        repo_name: Optional[str] = None,
+        embed_fn: Callable[[list[str]], np.ndarray] | None = None,
+        repo_name: str | None = None,
     ) -> int:
         """Update index metadata and vector embeddings for all functions affected by diff hunks.
 
@@ -68,7 +68,9 @@ class IncrementalIndexer:
 
                 if hunk.change_type == ChangeType.DELETED:
                     if node_idx is not None:
-                        logger.info("Marking deleted function: %s in %s", func.function_name, func.file_path)
+                        logger.info(
+                            "Marking deleted function: %s in %s", func.function_name, func.file_path
+                        )
                         if isinstance(current_nodes[node_idx], dict):
                             current_nodes[node_idx]["deleted"] = True
                         updated_count += 1
@@ -98,7 +100,9 @@ class IncrementalIndexer:
 
                     if vec.shape[1] == self.index_manager.dimension:
                         self.index_manager.index.add(vec)
-                        logger.debug("Added vector for function %s to FAISS index.", func.function_name)
+                        logger.debug(
+                            "Added vector for function %s to FAISS index.", func.function_name
+                        )
 
         # 3. Persist updated index and metadata snapshot to local cache
         idx_p, meta_p = self.storage_client.get_local_paths(target_repo)
@@ -108,7 +112,11 @@ class IncrementalIndexer:
             faiss.write_index(self.index_manager.index, str(idx_p))
             with open(meta_p, "w", encoding="utf-8") as f:
                 json.dump(self.index_manager.metadata, f, indent=2)
-            logger.info("Successfully persisted incremental update (%d functions) to %s", updated_count, idx_p)
+            logger.info(
+                "Successfully persisted incremental update (%d functions) to %s",
+                updated_count,
+                idx_p,
+            )
         except Exception as e:
             logger.error("Failed to persist incremental index snapshot: %s", e)
 
@@ -119,7 +127,7 @@ class IncrementalIndexer:
         repo_path: str,
         base_sha: str,
         head_sha: str,
-        embed_fn: Optional[Callable[[list[str]], np.ndarray]] = None,
+        embed_fn: Callable[[list[str]], np.ndarray] | None = None,
     ) -> int:
         """Extract merged commits diff and incrementally update codebase vector index."""
         hunks = extract_diff_from_repo(repo_path, base_sha, head_sha)

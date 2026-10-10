@@ -1,5 +1,6 @@
 import json
 import logging
+
 from src.utils.logging import JSONFormatter, request_id_ctx, setup_logging
 
 
@@ -49,6 +50,7 @@ def test_json_formatter_with_exception():
         raise ValueError("Simulated failure")
     except ValueError:
         import sys
+
         exc_info = sys.exc_info()
 
     record = logging.LogRecord(

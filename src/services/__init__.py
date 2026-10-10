@@ -6,5 +6,3 @@ from src.services.index_manager import IndexManager
 from src.services.storage_client import StorageClient
 
 __all__ = ["StorageClient", "IndexManager", "GitHubClient", "IncrementalIndexer"]
-
-

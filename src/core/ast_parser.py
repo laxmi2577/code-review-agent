@@ -1,9 +1,9 @@
 from pathlib import Path
-from typing import Optional
 
-from tree_sitter import Language as TSLanguage, Node, Parser
 import tree_sitter_python
 import tree_sitter_typescript
+from tree_sitter import Language as TSLanguage
+from tree_sitter import Node, Parser
 
 from src.core.diff_parser import detect_language
 from src.models.enums import Language
@@ -35,7 +35,9 @@ class ASTParser:
             return self._extract_python_functions(tree.root_node, code_bytes, file_path)
         elif language in (Language.TYPESCRIPT, Language.JAVASCRIPT):
             tree = self._ts_parser.parse(code_bytes)
-            return self._extract_typescript_functions(tree.root_node, code_bytes, file_path, language)
+            return self._extract_typescript_functions(
+                tree.root_node, code_bytes, file_path, language
+            )
         else:
             return []
 
@@ -57,7 +59,7 @@ class ASTParser:
     ) -> list[FunctionNode]:
         nodes: list[FunctionNode] = []
 
-        def traverse(node: Node, current_class: Optional[str] = None):
+        def traverse(node: Node, current_class: str | None = None):
             if node.type == "class_definition":
                 name_node = node.child_by_field_name("name")
                 class_name = (
@@ -74,7 +76,9 @@ class ASTParser:
                 )
                 start_line = node.start_point[0] + 1
                 end_line = node.end_point[0] + 1
-                snippet = code_bytes[node.start_byte : node.end_byte].decode("utf-8", errors="replace")
+                snippet = code_bytes[node.start_byte : node.end_byte].decode(
+                    "utf-8", errors="replace"
+                )
 
                 nodes.append(
                     FunctionNode(
@@ -103,7 +107,7 @@ class ASTParser:
     ) -> list[FunctionNode]:
         nodes: list[FunctionNode] = []
 
-        def traverse(node: Node, current_class: Optional[str] = None):
+        def traverse(node: Node, current_class: str | None = None):
             if node.type in ("class_declaration", "class"):
                 name_node = node.child_by_field_name("name")
                 class_name = (
@@ -120,7 +124,9 @@ class ASTParser:
                 )
                 start_line = node.start_point[0] + 1
                 end_line = node.end_point[0] + 1
-                snippet = code_bytes[node.start_byte : node.end_byte].decode("utf-8", errors="replace")
+                snippet = code_bytes[node.start_byte : node.end_byte].decode(
+                    "utf-8", errors="replace"
+                )
 
                 nodes.append(
                     FunctionNode(
@@ -143,9 +149,7 @@ class ASTParser:
                     and value_node.type in ("arrow_function", "function_expression")
                     and name_node
                 ):
-                    func_name = (
-                        name_node.text.decode("utf-8") if name_node.text else "anonymous"
-                    )
+                    func_name = name_node.text.decode("utf-8") if name_node.text else "anonymous"
                     start_line = value_node.start_point[0] + 1
                     end_line = value_node.end_point[0] + 1
                     snippet = code_bytes[value_node.start_byte : value_node.end_byte].decode(

@@ -1,9 +1,8 @@
 import json
 import logging
-import os
 import shutil
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any
 
 from src.config import Settings, get_settings
 
@@ -15,8 +14,8 @@ class StorageClient:
 
     def __init__(
         self,
-        settings: Optional[Settings] = None,
-        base_cache_dir: Optional[Union[str, Path]] = None,
+        settings: Settings | None = None,
+        base_cache_dir: str | Path | None = None,
     ):
         self.settings = settings or get_settings()
         if base_cache_dir:
@@ -73,13 +72,13 @@ class StorageClient:
         )
         return index_path, metadata_path
 
-    def load_metadata(self, repo_name: str) -> Optional[dict[str, Any]]:
+    def load_metadata(self, repo_name: str) -> dict[str, Any] | None:
         """Load and return the metadata dictionary for a repository if present."""
         _, metadata_path = self.get_local_paths(repo_name)
         if not metadata_path.exists():
             return None
         try:
-            with open(metadata_path, "r", encoding="utf-8") as f:
+            with open(metadata_path, encoding="utf-8") as f:
                 return json.load(f)
         except Exception as e:
             logger.warning("Failed to parse metadata JSON at %s: %s", metadata_path, e)
@@ -89,7 +88,7 @@ class StorageClient:
         self,
         repo_name: str,
         force_download: bool = False,
-    ) -> tuple[Optional[Path], Optional[Path]]:
+    ) -> tuple[Path | None, Path | None]:
         """Download or retrieve index binary and metadata for a repository.
 
         Attempts remote GCS download if configured; falls back gracefully to local cache.
@@ -123,8 +122,8 @@ class StorageClient:
     def upload_index(
         self,
         repo_name: str,
-        index_path: Union[str, Path],
-        metadata_path: Union[str, Path],
+        index_path: str | Path,
+        metadata_path: str | Path,
     ) -> bool:
         """Upload index and metadata to local cache and remote storage (if configured)."""
         idx_src = Path(index_path)

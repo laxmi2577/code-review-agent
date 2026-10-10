@@ -6,5 +6,3 @@ from src.api.reviews import router as reviews_router
 from src.api.webhooks import router as webhooks_router
 
 __all__ = ["health_router", "webhooks_router", "feedback_router", "reviews_router"]
-
-

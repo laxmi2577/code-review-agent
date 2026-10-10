@@ -19,5 +19,3 @@ __all__ = [
     "map_diff_to_functions",
     "parse_unified_diff",
 ]
-
-

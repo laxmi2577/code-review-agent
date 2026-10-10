@@ -1,6 +1,5 @@
 import re
 from pathlib import Path
-from typing import Optional
 
 from git import Repo
 
@@ -18,12 +17,10 @@ EXTENSION_LANGUAGE_MAP: dict[str, Language] = {
     ".rs": Language.RUST,
 }
 
-HUNK_HEADER_REGEX = re.compile(
-    r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(?: ?(.*))?$"
-)
+HUNK_HEADER_REGEX = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(?: ?(.*))?$")
 
 
-def detect_language(file_path: str) -> Optional[Language]:
+def detect_language(file_path: str) -> Language | None:
     """Detect Language enum from file extension."""
     suffix = Path(file_path).suffix.lower()
     return EXTENSION_LANGUAGE_MAP.get(suffix)
@@ -34,8 +31,8 @@ def parse_unified_diff(diff_text: str) -> list[DiffHunk]:
     hunks: list[DiffHunk] = []
     lines = diff_text.splitlines()
 
-    current_file_path: Optional[str] = None
-    file_change_type: Optional[ChangeType] = None
+    current_file_path: str | None = None
+    file_change_type: ChangeType | None = None
     current_hunk_header = None
     current_hunk_lines: list[str] = []
 

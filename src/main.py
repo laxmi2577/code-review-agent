@@ -1,6 +1,6 @@
 import uuid
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,7 +12,6 @@ from src.api.reviews import router as reviews_router
 from src.api.webhooks import router as webhooks_router
 from src.config import get_settings
 from src.utils.logging import request_id_ctx, setup_logging
-
 
 
 class RequestIdMiddleware(BaseHTTPMiddleware):
@@ -56,7 +55,6 @@ def create_app() -> FastAPI:
     app.include_router(feedback_router)
     app.include_router(reviews_router)
 
-
     @app.get("/", tags=["Root"])
     def root_endpoint():
         return {
@@ -68,8 +66,6 @@ def create_app() -> FastAPI:
         }
 
     return app
-
-
 
 
 app = create_app()

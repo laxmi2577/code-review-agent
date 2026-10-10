@@ -1,17 +1,17 @@
 import logging
 import time
-from typing import Optional
+from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, status
 from pydantic import BaseModel, Field
 
-from src.api.webhooks import get_index_manager, process_pr_review_pipeline
+from src.api.webhooks import get_index_manager
 from src.config import Settings, get_settings
 from src.core.ast_parser import ASTParser
 from src.core.diff_parser import map_diff_to_functions, parse_unified_diff
 from src.core.retriever import CodeRetriever
 from src.core.reviewer import GeminiReviewer
-from src.models.schemas import PREvent, ReviewComment
+from src.models.schemas import ReviewComment
 from src.services.github_client import GitHubClient
 from src.services.index_manager import IndexManager
 
@@ -22,9 +22,13 @@ router = APIRouter(prefix="/reviews", tags=["Reviews"])
 class ManualReviewRequest(BaseModel):
     repo_full_name: str = Field(description="Full GitHub repository name (e.g. owner/repo)")
     pr_number: int = Field(description="Pull request number")
-    diff_text: Optional[str] = Field(default=None, description="Optional raw unified diff text if testing locally")
-    commit_id: Optional[str] = Field(default=None, description="Target commit SHA")
-    post_to_github: bool = Field(default=False, description="Whether to publish comments to GitHub PR")
+    diff_text: str | None = Field(
+        default=None, description="Optional raw unified diff text if testing locally"
+    )
+    commit_id: str | None = Field(default=None, description="Target commit SHA")
+    post_to_github: bool = Field(
+        default=False, description="Whether to publish comments to GitHub PR"
+    )
 
 
 class ManualReviewResponse(BaseModel):
@@ -37,10 +41,10 @@ class ManualReviewResponse(BaseModel):
 
 def run_manual_review(
     req: ManualReviewRequest,
-    settings: Optional[Settings] = None,
-    index_mgr: Optional[IndexManager] = None,
-    reviewer: Optional[GeminiReviewer] = None,
-    gh_client: Optional[GitHubClient] = None,
+    settings: Settings | None = None,
+    index_mgr: IndexManager | None = None,
+    reviewer: GeminiReviewer | None = None,
+    gh_client: GitHubClient | None = None,
 ) -> ManualReviewResponse:
     """Execute manual review logic with optional injectable dependencies."""
     start_time = time.perf_counter()
@@ -60,12 +64,17 @@ def run_manual_review(
             if not commit_sha:
                 commit_sha = pull.head.sha
             # Fetch unified diff
-            diff_content = pull.get_issue_comments() # or diff
+            diff_content = pull.get_issue_comments()  # or diff
             # PyGithub pull.diff_url or pull.get_files()
             # For direct diff content, fetch through pull object or diff_url
             diff_content = getattr(pull, "diff_url", "")
         except Exception as e:
-            logger.warning("Could not fetch remote PR details for %s#%d: %s", req.repo_full_name, req.pr_number, e)
+            logger.warning(
+                "Could not fetch remote PR details for %s#%d: %s",
+                req.repo_full_name,
+                req.pr_number,
+                e,
+            )
 
     hunks = parse_unified_diff(diff_content) if diff_content else []
 
@@ -73,7 +82,11 @@ def run_manual_review(
     ast_parser = ASTParser()
     functions_by_file = {}
     for hunk in hunks:
-        functions_by_file[hunk.file_path] = []
+        hunk_p = Path(hunk.file_path)
+        if hunk_p.exists():
+            functions_by_file[hunk.file_path] = ast_parser.parse_file(hunk_p)
+        else:
+            functions_by_file[hunk.file_path] = []
 
     hunks = map_diff_to_functions(hunks, functions_by_file)
 
@@ -109,4 +122,3 @@ def run_manual_review(
 def generate_manual_review(req: ManualReviewRequest) -> ManualReviewResponse:
     """Trigger an on-demand code review for a PR, bypassing the webhook receiver."""
     return run_manual_review(req)
-

@@ -1,7 +1,6 @@
 import json
 import logging
 import re
-from typing import Any, Optional
 
 import google.generativeai as genai
 
@@ -39,7 +38,7 @@ class GeminiReviewer:
 
     def __init__(
         self,
-        settings: Optional[Settings] = None,
+        settings: Settings | None = None,
         model_name: str = "gemini-1.5-flash",
     ):
         self.settings = settings or get_settings()
@@ -50,7 +49,9 @@ class GeminiReviewer:
             genai.configure(api_key=self.settings.gemini_api_key)
             self._configured = True
         else:
-            logger.warning("Gemini API key is not configured in settings. Calls will require mocked responses.")
+            logger.warning(
+                "Gemini API key is not configured in settings. Calls will require mocked responses."
+            )
 
     def build_prompt(
         self,
@@ -140,15 +141,23 @@ class GeminiReviewer:
 
         prompt = self.build_prompt(diff_hunks, retrieval_results)
 
-        try:
-            model = genai.GenerativeModel(
-                model_name=self.model_name,
-                system_instruction=REVIEWER_SYSTEM_PROMPT,
-                generation_config={"response_mime_type": "application/json"},
-            )
-            response = model.generate_content(prompt)
-            raw_text = response.text or ""
-            return self.parse_review_response(raw_text)
-        except Exception as e:
-            logger.error("Gemini API generation failed: %s", e, exc_info=True)
-            return []
+        candidate_models = list(
+            dict.fromkeys([self.model_name, "gemini-flash-latest", "gemini-2.5-flash", "gemini-1.5-flash"])
+        )
+
+        for model_id in candidate_models:
+            try:
+                model = genai.GenerativeModel(
+                    model_name=model_id,
+                    system_instruction=REVIEWER_SYSTEM_PROMPT,
+                    generation_config={"response_mime_type": "application/json"},
+                )
+                response = model.generate_content(prompt)
+                raw_text = response.text or ""
+                return self.parse_review_response(raw_text)
+            except Exception as e:
+                logger.warning("Gemini generation with '%s' failed: %s. Trying fallback...", model_id, e)
+                continue
+
+        logger.error("All candidate Gemini models failed to generate review.")
+        return []

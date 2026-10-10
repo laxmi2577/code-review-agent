@@ -1,7 +1,7 @@
 from src.core.ast_parser import ASTParser
 from src.models.enums import Language
 
-PYTHON_CODE = '''class UserService:
+PYTHON_CODE = """class UserService:
     def __init__(self, db):
         self.db = db
 
@@ -10,9 +10,9 @@ PYTHON_CODE = '''class UserService:
 
 def standalone_helper(x: int) -> int:
     return x * 2
-'''
+"""
 
-TYPESCRIPT_CODE = '''class AuthService {
+TYPESCRIPT_CODE = """class AuthService {
     login(token: string): boolean {
         return token.length > 0;
     }
@@ -25,7 +25,7 @@ function verifyToken(secret: string): void {
 const formatUser = (user: any) => {
     return user.name;
 };
-'''
+"""
 
 
 def test_parse_python_functions_and_methods():

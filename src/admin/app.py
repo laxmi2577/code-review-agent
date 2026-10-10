@@ -1,7 +1,12 @@
 import json
-import os
+import sys
 import time
 from pathlib import Path
+
+# Ensure project root is in sys.path when launched by Streamlit runner
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 import pandas as pd
 import streamlit as st
@@ -47,7 +52,10 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-st.markdown('<div class="main-header">🔍 CodeLens Admin & Intelligence Dashboard</div>', unsafe_allow_html=True)
+st.markdown(
+    '<div class="main-header">🔍 CodeLens Admin & Intelligence Dashboard</div>',
+    unsafe_allow_html=True,
+)
 st.markdown(
     '<div class="sub-header">Retrieval-Augmented Code Review Control Plane & Feedback Telemetry</div>',
     unsafe_allow_html=True,
@@ -56,10 +64,17 @@ st.markdown(
 settings = get_settings()
 storage_client = StorageClient(settings=settings)
 
+def _load_active_index(mgr: IndexManager) -> bool:
+    idx_p = Path(settings.local_index_path)
+    meta_p = Path(settings.local_metadata_path)
+    if idx_p.exists() and meta_p.exists():
+        return mgr.load_index(index_path=idx_p, metadata_path=meta_p)
+    return mgr.load_index()
+
 # Cache index manager in session state
 if "index_manager" not in st.session_state:
     mgr = IndexManager(settings=settings, storage_client=storage_client)
-    mgr.load_index()
+    _load_active_index(mgr)
     st.session_state.index_manager = mgr
 
 index_manager: IndexManager = st.session_state.index_manager
@@ -72,14 +87,16 @@ st.sidebar.text(f"Storage Bucket: {settings.gcs_bucket}")
 st.sidebar.markdown("---")
 
 if st.sidebar.button("🔄 Reload Index from Disk"):
-    success = index_manager.load_index()
+    success = _load_active_index(index_manager)
     if success:
         st.sidebar.success("Index reloaded successfully!")
     else:
         st.sidebar.warning("Index not found or failed to load.")
 
 # Tabs
-tab1, tab2, tab3 = st.tabs(["📊 Vector Index Health", "💬 Human Feedback Analytics", "🧪 Live PR Review Tester"])
+tab1, tab2, tab3 = st.tabs(
+    ["📊 Vector Index Health", "💬 Human Feedback Analytics", "🧪 Live PR Review Tester"]
+)
 
 # Tab 1: Vector Index Health
 with tab1:
@@ -99,7 +116,9 @@ with tab1:
     col4.metric("Last Updated", age_str)
 
     st.markdown("### Storage Paths")
-    st.code(f"Index File:    {settings.local_index_path}\nMetadata File: {settings.local_metadata_path}")
+    st.code(
+        f"Index File:    {settings.local_index_path}\nMetadata File: {settings.local_metadata_path}"
+    )
 
     if not is_loaded:
         st.info(
@@ -115,7 +134,7 @@ with tab2:
     records = []
     if feedback_file.exists():
         try:
-            with open(feedback_file, "r", encoding="utf-8") as f:
+            with open(feedback_file, encoding="utf-8") as f:
                 for line in f:
                     if line.strip():
                         records.append(json.loads(line))
@@ -138,7 +157,9 @@ with tab2:
         st.markdown("### Recent Feedback Events")
         st.dataframe(df.tail(20), use_container_width=True)
     else:
-        st.info("No feedback events logged yet. Reactions from GitHub will appear here once submitted via `/feedback`.")
+        st.info(
+            "No feedback events logged yet. Reactions from GitHub will appear here once submitted via `/feedback`."
+        )
 
 # Tab 3: Live Review Tester
 with tab3:
@@ -165,8 +186,24 @@ with tab3:
             start = time.perf_counter()
             hunks = parse_unified_diff(form_diff)
 
+            # Extract AST functions from diff content or local files
             ast_parser = ASTParser()
-            funcs_by_file = {h.file_path: [] for h in hunks}
+            funcs_by_file = {}
+            for h in hunks:
+                local_p = Path(h.file_path)
+                if local_p.exists():
+                    funcs_by_file[h.file_path] = ast_parser.parse_file(local_p)
+                else:
+                    # Clean diff content (+ / - prefixes) to parse functions directly
+                    clean_lines = [
+                        line[1:] if line.startswith(("+", " ")) else line
+                        for line in h.diff_content.splitlines()
+                        if not line.startswith("-") and not line.startswith("@@")
+                    ]
+                    clean_code = "\n".join(clean_lines)
+                    funcs = ast_parser.parse_source(clean_code, h.file_path, h.language)
+                    funcs_by_file[h.file_path] = funcs
+
             hunks = map_diff_to_functions(hunks, funcs_by_file)
 
             retriever = CodeRetriever(index_manager=index_manager)
@@ -176,13 +213,30 @@ with tab3:
             comments = reviewer.generate_review(hunks, retrieval_results)
             elapsed = (time.perf_counter() - start) * 1000.0
 
-            st.success(f"Analysis completed in {elapsed:.1f}ms — Generated {len(comments)} comments.")
+            st.markdown(f"**⚡ Analysis completed in `{elapsed:.1f}ms`**")
+
+            # Diagnostic breakdown
+            affected_fn_names = [
+                fn.function_name for h in hunks for fn in h.affected_functions
+            ]
+            st.info(
+                f"🔎 **Diff Parsing**: {len(hunks)} hunk(s) parsed | "
+                f"**AST Functions Detected**: {len(affected_fn_names)} ({', '.join(affected_fn_names) if affected_fn_names else 'None'}) | "
+                f"**Codebase Context Matches**: {len(retrieval_results)}"
+            )
 
             if comments:
+                st.success(f"Generated {len(comments)} Review Comment(s):")
                 for c in comments:
-                    with st.expander(f"[{c.severity.value.upper()}] {c.file_path} (Lines {c.start_line}–{c.end_line})"):
-                        st.markdown(c.body)
+                    with st.expander(
+                        f"[{c.severity.value.upper()}] {c.file_path} (Lines {c.start_line}–{c.end_line})",
+                        expanded=True,
+                    ):
+                        st.markdown(f"**Issue Description**:\n{c.body}")
                         if c.retrieved_context_refs:
                             st.caption(f"Context references: {', '.join(c.retrieved_context_refs)}")
             else:
-                st.info("No issues detected in the submitted diff.")
+                st.warning(
+                    "No review comments returned. If you expected a critical review on this diff, "
+                    "verify that your `GEMINI_API_KEY` in `.env` is valid and active."
+                )

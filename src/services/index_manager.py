@@ -1,7 +1,7 @@
 import json
 import logging
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any
 
 import faiss
 import numpy as np
@@ -18,13 +18,13 @@ class IndexManager:
 
     def __init__(
         self,
-        settings: Optional[Settings] = None,
-        storage_client: Optional[StorageClient] = None,
+        settings: Settings | None = None,
+        storage_client: StorageClient | None = None,
     ):
         self.settings = settings or get_settings()
         self.storage_client = storage_client or StorageClient(settings=self.settings)
-        self.index: Optional[faiss.Index] = None
-        self.metadata: Optional[dict[str, Any]] = None
+        self.index: faiss.Index | None = None
+        self.metadata: dict[str, Any] | None = None
         self._nodes_by_index: dict[int, FunctionNode] = {}
         self._nodes_by_embedding_id: dict[str, FunctionNode] = {}
 
@@ -49,9 +49,9 @@ class IndexManager:
 
     def load_index(
         self,
-        index_path: Optional[Union[str, Path]] = None,
-        metadata_path: Optional[Union[str, Path]] = None,
-        repo_name: Optional[str] = None,
+        index_path: str | Path | None = None,
+        metadata_path: str | Path | None = None,
+        repo_name: str | None = None,
     ) -> bool:
         """Load FAISS index binary and metadata JSON into memory.
 
@@ -87,7 +87,7 @@ class IndexManager:
             loaded_index = faiss.read_index(str(idx_file))
 
             # Load metadata JSON
-            with open(meta_file, "r", encoding="utf-8") as f:
+            with open(meta_file, encoding="utf-8") as f:
                 loaded_metadata = json.load(f)
 
             # Build node lookup tables
@@ -134,15 +134,15 @@ class IndexManager:
             self._nodes_by_embedding_id.clear()
             return False
 
-    def get_function_node(self, index_id: int) -> Optional[FunctionNode]:
+    def get_function_node(self, index_id: int) -> FunctionNode | None:
         """Lookup FunctionNode by its vector row index in FAISS."""
         return self._nodes_by_index.get(index_id)
 
-    def get_node_by_embedding_id(self, embedding_id: str) -> Optional[FunctionNode]:
+    def get_node_by_embedding_id(self, embedding_id: str) -> FunctionNode | None:
         """Lookup FunctionNode by its string embedding_id."""
         return self._nodes_by_embedding_id.get(str(embedding_id))
 
-    def reconstruct_vector(self, index_id: int) -> Optional[np.ndarray]:
+    def reconstruct_vector(self, index_id: int) -> np.ndarray | None:
         """Reconstruct the original embedding vector from FAISS if supported."""
         if self.index is None or index_id < 0 or index_id >= self.total_vectors:
             return None

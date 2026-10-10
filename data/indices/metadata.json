@@ -1,0 +1,1398 @@
+{
+  "repo_name": "laxmi2577/code-review-agent",
+  "embedding_model": "all-MiniLM-L6-v2",
+  "dimension": 384,
+  "total_vectors": 139,
+  "nodes": [
+    {
+      "file_path": "src/main.py",
+      "function_name": "dispatch",
+      "class_name": "RequestIdMiddleware",
+      "language": "python",
+      "start_line": 19,
+      "end_line": 27,
+      "code_snippet": "async def dispatch(self, request: Request, call_next):\n        req_id = request.headers.get(\"X-Request-ID\", str(uuid.uuid4()))\n        token = request_id_ctx.set(req_id)\n        try:\n            response = await call_next(request)\n            response.headers[\"X-Request-ID\"] = req_id\n            return response\n        finally:\n            request_id_ctx.reset(token)",
+      "embedding_id": "0"
+    },
+    {
+      "file_path": "src/main.py",
+      "function_name": "lifespan",
+      "class_name": null,
+      "language": "python",
+      "start_line": 31,
+      "end_line": 34,
+      "code_snippet": "async def lifespan(app: FastAPI) -> AsyncIterator[None]:\n    settings = get_settings()\n    setup_logging(log_level=settings.log_level)\n    yield",
+      "embedding_id": "1"
+    },
+    {
+      "file_path": "src/main.py",
+      "function_name": "create_app",
+      "class_name": null,
+      "language": "python",
+      "start_line": 37,
+      "end_line": 70,
+      "code_snippet": "def create_app() -> FastAPI:\n    app = FastAPI(\n        title=\"CodeLens\",\n        description=\"Retrieval-Augmented Code Review Agent with Codebase-Aware Context\",\n        version=\"0.1.0\",\n        lifespan=lifespan,\n    )\n\n    app.add_middleware(\n        CORSMiddleware,\n        allow_origins=[\"*\"],\n        allow_credentials=True,\n        allow_methods=[\"*\"],\n        allow_headers=[\"*\"],\n    )\n    app.add_middleware(RequestIdMiddleware)\n\n    app.include_router(health_router)\n    app.include_router(webhooks_router)\n    app.include_router(feedback_router)\n    app.include_router(reviews_router)\n\n\n    @app.get(\"/\", tags=[\"Root\"])\n    def root_endpoint():\n        return {\n            \"name\": \"CodeLens\",\n            \"version\": \"0.1.0\",\n            \"status\": \"online\",\n            \"docs\": \"/docs\",\n            \"health\": \"/health\",\n        }\n\n    return app",
+      "embedding_id": "2"
+    },
+    {
+      "file_path": "src/main.py",
+      "function_name": "root_endpoint",
+      "class_name": null,
+      "language": "python",
+      "start_line": 61,
+      "end_line": 68,
+      "code_snippet": "def root_endpoint():\n        return {\n            \"name\": \"CodeLens\",\n            \"version\": \"0.1.0\",\n            \"status\": \"online\",\n            \"docs\": \"/docs\",\n            \"health\": \"/health\",\n        }",
+      "embedding_id": "3"
+    },
+    {
+      "file_path": "src/config.py",
+      "function_name": "get_settings",
+      "class_name": null,
+      "language": "python",
+      "start_line": 37,
+      "end_line": 41,
+      "code_snippet": "def get_settings() -> Settings:\n    global _settings\n    if _settings is None:\n        _settings = Settings()\n    return _settings",
+      "embedding_id": "4"
+    },
+    {
+      "file_path": "src/utils/logging.py",
+      "function_name": "format",
+      "class_name": "JSONFormatter",
+      "language": "python",
+      "start_line": 14,
+      "end_line": 32,
+      "code_snippet": "def format(self, record: logging.LogRecord) -> str:\n        log_entry: dict[str, Any] = {\n            \"timestamp\": datetime.now(timezone.utc).isoformat(),\n            \"level\": record.levelname,\n            \"logger\": record.name,\n            \"message\": record.getMessage(),\n        }\n\n        req_id = getattr(record, \"request_id\", None) or request_id_ctx.get()\n        if req_id:\n            log_entry[\"request_id\"] = req_id\n\n        if record.exc_info:\n            log_entry[\"exception\"] = self.formatException(record.exc_info)\n\n        if hasattr(record, \"extra_fields\") and isinstance(record.extra_fields, dict):\n            log_entry.update(record.extra_fields)\n\n        return json.dumps(log_entry)",
+      "embedding_id": "5"
+    },
+    {
+      "file_path": "src/utils/logging.py",
+      "function_name": "setup_logging",
+      "class_name": null,
+      "language": "python",
+      "start_line": 35,
+      "end_line": 45,
+      "code_snippet": "def setup_logging(log_level: str = \"INFO\") -> None:\n    \"\"\"Configure the root logger with JSONFormatter outputting to stdout.\"\"\"\n    level = getattr(logging, log_level.upper(), logging.INFO)\n    root_logger = logging.getLogger()\n    root_logger.setLevel(level)\n    root_logger.handlers.clear()\n\n    handler = logging.StreamHandler(sys.stdout)\n    handler.setLevel(level)\n    handler.setFormatter(JSONFormatter())\n    root_logger.addHandler(handler)",
+      "embedding_id": "6"
+    },
+    {
+      "file_path": "src/utils/security.py",
+      "function_name": "verify_webhook_signature",
+      "class_name": null,
+      "language": "python",
+      "start_line": 6,
+      "end_line": 32,
+      "code_snippet": "def verify_webhook_signature(\n    payload_bytes: bytes,\n    signature_header: Optional[str],\n    secret: str,\n) -> bool:\n    \"\"\"Verify GitHub webhook signature using HMAC-SHA256.\n\n    GitHub passes the header 'X-Hub-Signature-256' in the format 'sha256=<hex_digest>'.\n    Uses hmac.compare_digest to prevent timing attacks.\n    \"\"\"\n    if not signature_header or not secret:\n        return False\n\n    if not signature_header.startswith(\"sha256=\"):\n        return False\n\n    expected_hash = signature_header[7:].strip()\n    if not expected_hash:\n        return False\n\n    computed_mac = hmac.new(\n        key=secret.encode(\"utf-8\"),\n        msg=payload_bytes,\n        digestmod=hashlib.sha256,\n    ).hexdigest()\n\n    return hmac.compare_digest(computed_mac, expected_hash)",
+      "embedding_id": "7"
+    },
+    {
+      "file_path": "src/core/retriever.py",
+      "function_name": "__init__",
+      "class_name": "CodeRetriever",
+      "language": "python",
+      "start_line": 15,
+      "end_line": 16,
+      "code_snippet": "def __init__(self, index_manager: IndexManager):\n        self.index_manager = index_manager",
+      "embedding_id": "8"
+    },
+    {
+      "file_path": "src/core/retriever.py",
+      "function_name": "retrieve_similar",
+      "class_name": "CodeRetriever",
+      "language": "python",
+      "start_line": 18,
+      "end_line": 94,
+      "code_snippet": "def retrieve_similar(\n        self,\n        query_function: FunctionNode,\n        top_k: int = 5,\n        query_embedding: Optional[np.ndarray] = None,\n        exclude_self: bool = True,\n    ) -> RetrievalResult:\n        \"\"\"Retrieve the top-k most similar functions for a given query FunctionNode.\n\n        If query_embedding is provided, it is queried directly.\n        Otherwise, if query_function.embedding_id is present, attempts vector reconstruction\n        from the index manager.\n\n        Returns a RetrievalResult schema instance with matched nodes and similarity scores.\n        \"\"\"\n        if not self.index_manager.is_loaded:\n            logger.warning(\n                \"Retriever called but index is not loaded. Returning empty retrieval result for '%s'.\",\n                query_function.function_name,\n            )\n            return RetrievalResult(\n                query_function=query_function,\n                similar_functions=[],\n                similarity_scores=[],\n            )\n\n        # Resolve vector\n        vector: Optional[np.ndarray] = query_embedding\n        if vector is None and query_function.embedding_id is not None:\n            emb_id_str = str(query_function.embedding_id)\n            if emb_id_str.isdigit():\n                vector = self.index_manager.reconstruct_vector(int(emb_id_str))\n\n        if vector is None:\n            logger.info(\n                \"No embedding available for query function '%s' (embedding_id=%s). Returning empty result.\",\n                query_function.function_name,\n                query_function.embedding_id,\n            )\n            return RetrievalResult(\n                query_function=query_function,\n                similar_functions=[],\n                similarity_scores=[],\n            )\n\n        # Query index (retrieve extra item if excluding self)\n        fetch_k = top_k + 1 if exclude_self else top_k\n        nodes, scores = self.index_manager.query(vector, top_k=fetch_k)\n\n        filtered_nodes: list[FunctionNode] = []\n        filtered_scores: list[float] = []\n\n        for node, score in zip(nodes, scores):\n            if exclude_self:\n                # Check identity match\n                is_self_by_emb = (\n                    query_function.embedding_id is not None\n                    and node.embedding_id == query_function.embedding_id\n                )\n                is_self_by_name = (\n                    node.file_path == query_function.file_path\n                    and node.function_name == query_function.function_name\n                )\n                if is_self_by_emb or is_self_by_name:\n                    continue\n\n            filtered_nodes.append(node)\n            filtered_scores.append(score)\n\n            if len(filtered_nodes) >= top_k:\n                break\n\n        return RetrievalResult(\n            query_function=query_function,\n            similar_functions=filtered_nodes,\n            similarity_scores=filtered_scores,\n        )",
+      "embedding_id": "9"
+    },
+    {
+      "file_path": "src/core/retriever.py",
+      "function_name": "retrieve_for_hunks",
+      "class_name": "CodeRetriever",
+      "language": "python",
+      "start_line": 96,
+      "end_line": 114,
+      "code_snippet": "def retrieve_for_hunks(\n        self,\n        diff_hunks: list[DiffHunk],\n        top_k: int = 5,\n    ) -> list[RetrievalResult]:\n        \"\"\"Retrieve similar context functions for all affected functions across multiple DiffHunks.\"\"\"\n        results: list[RetrievalResult] = []\n        seen_keys: set[tuple[str, str]] = set()\n\n        for hunk in diff_hunks:\n            for func_node in hunk.affected_functions:\n                key = (func_node.file_path, func_node.function_name)\n                if key in seen_keys:\n                    continue\n                seen_keys.add(key)\n                res = self.retrieve_similar(func_node, top_k=top_k)\n                results.append(res)\n\n        return results",
+      "embedding_id": "10"
+    },
+    {
+      "file_path": "src/core/ast_parser.py",
+      "function_name": "__init__",
+      "class_name": "ASTParser",
+      "language": "python",
+      "start_line": 16,
+      "end_line": 22,
+      "code_snippet": "def __init__(self):\n        # Initialize Tree-sitter parsers\n        self._python_lang = TSLanguage(tree_sitter_python.language())\n        self._python_parser = Parser(self._python_lang)\n\n        self._ts_lang = TSLanguage(tree_sitter_typescript.language_typescript())\n        self._ts_parser = Parser(self._ts_lang)",
+      "embedding_id": "11"
+    },
+    {
+      "file_path": "src/core/ast_parser.py",
+      "function_name": "parse_source",
+      "class_name": "ASTParser",
+      "language": "python",
+      "start_line": 24,
+      "end_line": 40,
+      "code_snippet": "def parse_source(\n        self,\n        code: str,\n        file_path: str,\n        language: Language,\n    ) -> list[FunctionNode]:\n        \"\"\"Parse source code string into a list of FunctionNode AST representations.\"\"\"\n        code_bytes = code.encode(\"utf-8\")\n\n        if language == Language.PYTHON:\n            tree = self._python_parser.parse(code_bytes)\n            return self._extract_python_functions(tree.root_node, code_bytes, file_path)\n        elif language in (Language.TYPESCRIPT, Language.JAVASCRIPT):\n            tree = self._ts_parser.parse(code_bytes)\n            return self._extract_typescript_functions(tree.root_node, code_bytes, file_path, language)\n        else:\n            return []",
+      "embedding_id": "12"
+    },
+    {
+      "file_path": "src/core/ast_parser.py",
+      "function_name": "parse_file",
+      "class_name": "ASTParser",
+      "language": "python",
+      "start_line": 42,
+      "end_line": 50,
+      "code_snippet": "def parse_file(self, file_path: str | Path) -> list[FunctionNode]:\n        \"\"\"Read a file from disk and parse all function nodes.\"\"\"\n        path = Path(file_path)\n        lang = detect_language(str(path))\n        if not lang:\n            return []\n\n        code = path.read_text(encoding=\"utf-8\", errors=\"replace\")\n        return self.parse_source(code, str(path), lang)",
+      "embedding_id": "13"
+    },
+    {
+      "file_path": "src/core/ast_parser.py",
+      "function_name": "_extract_python_functions",
+      "class_name": "ASTParser",
+      "language": "python",
+      "start_line": 52,
+      "end_line": 95,
+      "code_snippet": "def _extract_python_functions(\n        self,\n        root_node: Node,\n        code_bytes: bytes,\n        file_path: str,\n    ) -> list[FunctionNode]:\n        nodes: list[FunctionNode] = []\n\n        def traverse(node: Node, current_class: Optional[str] = None):\n            if node.type == \"class_definition\":\n                name_node = node.child_by_field_name(\"name\")\n                class_name = (\n                    name_node.text.decode(\"utf-8\") if name_node and name_node.text else None\n                )\n                for child in node.children:\n                    traverse(child, class_name)\n                return\n\n            if node.type == \"function_definition\":\n                name_node = node.child_by_field_name(\"name\")\n                func_name = (\n                    name_node.text.decode(\"utf-8\") if name_node and name_node.text else \"anonymous\"\n                )\n                start_line = node.start_point[0] + 1\n                end_line = node.end_point[0] + 1\n                snippet = code_bytes[node.start_byte : node.end_byte].decode(\"utf-8\", errors=\"replace\")\n\n                nodes.append(\n                    FunctionNode(\n                        file_path=file_path,\n                        function_name=func_name,\n                        class_name=current_class,\n                        language=Language.PYTHON,\n                        start_line=start_line,\n                        end_line=end_line,\n                        code_snippet=snippet,\n                    )\n                )\n\n            for child in node.children:\n                traverse(child, current_class)\n\n        traverse(root_node)\n        return nodes",
+      "embedding_id": "14"
+    },
+    {
+      "file_path": "src/core/ast_parser.py",
+      "function_name": "traverse",
+      "class_name": "ASTParser",
+      "language": "python",
+      "start_line": 60,
+      "end_line": 92,
+      "code_snippet": "def traverse(node: Node, current_class: Optional[str] = None):\n            if node.type == \"class_definition\":\n                name_node = node.child_by_field_name(\"name\")\n                class_name = (\n                    name_node.text.decode(\"utf-8\") if name_node and name_node.text else None\n                )\n                for child in node.children:\n                    traverse(child, class_name)\n                return\n\n            if node.type == \"function_definition\":\n                name_node = node.child_by_field_name(\"name\")\n                func_name = (\n                    name_node.text.decode(\"utf-8\") if name_node and name_node.text else \"anonymous\"\n                )\n                start_line = node.start_point[0] + 1\n                end_line = node.end_point[0] + 1\n                snippet = code_bytes[node.start_byte : node.end_byte].decode(\"utf-8\", errors=\"replace\")\n\n                nodes.append(\n                    FunctionNode(\n                        file_path=file_path,\n                        function_name=func_name,\n                        class_name=current_class,\n                        language=Language.PYTHON,\n                        start_line=start_line,\n                        end_line=end_line,\n                        code_snippet=snippet,\n                    )\n                )\n\n            for child in node.children:\n                traverse(child, current_class)",
+      "embedding_id": "15"
+    },
+    {
+      "file_path": "src/core/ast_parser.py",
+      "function_name": "_extract_typescript_functions",
+      "class_name": "ASTParser",
+      "language": "python",
+      "start_line": 97,
+      "end_line": 170,
+      "code_snippet": "def _extract_typescript_functions(\n        self,\n        root_node: Node,\n        code_bytes: bytes,\n        file_path: str,\n        language: Language,\n    ) -> list[FunctionNode]:\n        nodes: list[FunctionNode] = []\n\n        def traverse(node: Node, current_class: Optional[str] = None):\n            if node.type in (\"class_declaration\", \"class\"):\n                name_node = node.child_by_field_name(\"name\")\n                class_name = (\n                    name_node.text.decode(\"utf-8\") if name_node and name_node.text else None\n                )\n                for child in node.children:\n                    traverse(child, class_name)\n                return\n\n            if node.type in (\"function_declaration\", \"method_definition\"):\n                name_node = node.child_by_field_name(\"name\")\n                func_name = (\n                    name_node.text.decode(\"utf-8\") if name_node and name_node.text else \"anonymous\"\n                )\n                start_line = node.start_point[0] + 1\n                end_line = node.end_point[0] + 1\n                snippet = code_bytes[node.start_byte : node.end_byte].decode(\"utf-8\", errors=\"replace\")\n\n                nodes.append(\n                    FunctionNode(\n                        file_path=file_path,\n                        function_name=func_name,\n                        class_name=current_class,\n                        language=language,\n                        start_line=start_line,\n                        end_line=end_line,\n                        code_snippet=snippet,\n                    )\n                )\n\n            # Arrow function in variable declaration: const foo = () => {}\n            elif node.type == \"variable_declarator\":\n                name_node = node.child_by_field_name(\"name\")\n                value_node = node.child_by_field_name(\"value\")\n                if (\n                    value_node\n                    and value_node.type in (\"arrow_function\", \"function_expression\")\n                    and name_node\n                ):\n                    func_name = (\n                        name_node.text.decode(\"utf-8\") if name_node.text else \"anonymous\"\n                    )\n                    start_line = value_node.start_point[0] + 1\n                    end_line = value_node.end_point[0] + 1\n                    snippet = code_bytes[value_node.start_byte : value_node.end_byte].decode(\n                        \"utf-8\", errors=\"replace\"\n                    )\n                    nodes.append(\n                        FunctionNode(\n                            file_path=file_path,\n                            function_name=func_name,\n                            class_name=current_class,\n                            language=language,\n                            start_line=start_line,\n                            end_line=end_line,\n                            code_snippet=snippet,\n                        )\n                    )\n\n            for child in node.children:\n                traverse(child, current_class)\n\n        traverse(root_node)\n        return nodes",
+      "embedding_id": "16"
+    },
+    {
+      "file_path": "src/core/ast_parser.py",
+      "function_name": "traverse",
+      "class_name": "ASTParser",
+      "language": "python",
+      "start_line": 106,
+      "end_line": 167,
+      "code_snippet": "def traverse(node: Node, current_class: Optional[str] = None):\n            if node.type in (\"class_declaration\", \"class\"):\n                name_node = node.child_by_field_name(\"name\")\n                class_name = (\n                    name_node.text.decode(\"utf-8\") if name_node and name_node.text else None\n                )\n                for child in node.children:\n                    traverse(child, class_name)\n                return\n\n            if node.type in (\"function_declaration\", \"method_definition\"):\n                name_node = node.child_by_field_name(\"name\")\n                func_name = (\n                    name_node.text.decode(\"utf-8\") if name_node and name_node.text else \"anonymous\"\n                )\n                start_line = node.start_point[0] + 1\n                end_line = node.end_point[0] + 1\n                snippet = code_bytes[node.start_byte : node.end_byte].decode(\"utf-8\", errors=\"replace\")\n\n                nodes.append(\n                    FunctionNode(\n                        file_path=file_path,\n                        function_name=func_name,\n                        class_name=current_class,\n                        language=language,\n                        start_line=start_line,\n                        end_line=end_line,\n                        code_snippet=snippet,\n                    )\n                )\n\n            # Arrow function in variable declaration: const foo = () => {}\n            elif node.type == \"variable_declarator\":\n                name_node = node.child_by_field_name(\"name\")\n                value_node = node.child_by_field_name(\"value\")\n                if (\n                    value_node\n                    and value_node.type in (\"arrow_function\", \"function_expression\")\n                    and name_node\n                ):\n                    func_name = (\n                        name_node.text.decode(\"utf-8\") if name_node.text else \"anonymous\"\n                    )\n                    start_line = value_node.start_point[0] + 1\n                    end_line = value_node.end_point[0] + 1\n                    snippet = code_bytes[value_node.start_byte : value_node.end_byte].decode(\n                        \"utf-8\", errors=\"replace\"\n                    )\n                    nodes.append(\n                        FunctionNode(\n                            file_path=file_path,\n                            function_name=func_name,\n                            class_name=current_class,\n                            language=language,\n                            start_line=start_line,\n                            end_line=end_line,\n                            code_snippet=snippet,\n                        )\n                    )\n\n            for child in node.children:\n                traverse(child, current_class)",
+      "embedding_id": "17"
+    },
+    {
+      "file_path": "src/core/diff_parser.py",
+      "function_name": "detect_language",
+      "class_name": null,
+      "language": "python",
+      "start_line": 26,
+      "end_line": 29,
+      "code_snippet": "def detect_language(file_path: str) -> Optional[Language]:\n    \"\"\"Detect Language enum from file extension.\"\"\"\n    suffix = Path(file_path).suffix.lower()\n    return EXTENSION_LANGUAGE_MAP.get(suffix)",
+      "embedding_id": "18"
+    },
+    {
+      "file_path": "src/core/diff_parser.py",
+      "function_name": "parse_unified_diff",
+      "class_name": null,
+      "language": "python",
+      "start_line": 32,
+      "end_line": 118,
+      "code_snippet": "def parse_unified_diff(diff_text: str) -> list[DiffHunk]:\n    \"\"\"Parse git unified diff string into a list of DiffHunk objects.\"\"\"\n    hunks: list[DiffHunk] = []\n    lines = diff_text.splitlines()\n\n    current_file_path: Optional[str] = None\n    file_change_type: Optional[ChangeType] = None\n    current_hunk_header = None\n    current_hunk_lines: list[str] = []\n\n    def flush_hunk():\n        nonlocal current_hunk_header, current_hunk_lines\n        if not current_hunk_header or not current_file_path:\n            return\n\n        lang = detect_language(current_file_path)\n        if not lang:\n            current_hunk_header = None\n            current_hunk_lines = []\n            return\n\n        old_start, old_count, new_start, new_count = current_hunk_header\n        new_end = new_start + max(new_count - 1, 0)\n        hunk_content = \"\\n\".join(current_hunk_lines)\n\n        # Classify change type\n        if file_change_type:\n            c_type = file_change_type\n        elif old_start == 0 and old_count == 0:\n            c_type = ChangeType.ADDED\n        elif new_start == 0 and new_count == 0:\n            c_type = ChangeType.DELETED\n        else:\n            c_type = ChangeType.MODIFIED\n\n        hunks.append(\n            DiffHunk(\n                file_path=current_file_path,\n                language=lang,\n                change_type=c_type,\n                old_start=old_start,\n                new_start=new_start,\n                new_end=new_end,\n                diff_content=hunk_content,\n                affected_functions=[],\n            )\n        )\n        current_hunk_header = None\n        current_hunk_lines = []\n\n    for line in lines:\n        if line.startswith(\"diff --git \"):\n            flush_hunk()\n            file_change_type = None\n            # Extract path from 'diff --git a/path b/path'\n            parts = line.split(\" \")\n            if len(parts) >= 4:\n                b_path = parts[3]\n                current_file_path = b_path[2:] if b_path.startswith(\"b/\") else b_path\n        elif line.startswith(\"new file mode \"):\n            file_change_type = ChangeType.ADDED\n        elif line.startswith(\"deleted file mode \"):\n            file_change_type = ChangeType.DELETED\n        elif line.startswith(\"--- \"):\n            if line.startswith(\"--- /dev/null\"):\n                file_change_type = ChangeType.ADDED\n        elif line.startswith(\"+++ \"):\n            if line.startswith(\"+++ /dev/null\"):\n                file_change_type = ChangeType.DELETED\n            elif not current_file_path:\n                target = line[4:].strip()\n                current_file_path = target[2:] if target.startswith(\"b/\") else target\n        elif line.startswith(\"@@ \"):\n            flush_hunk()\n            match = HUNK_HEADER_REGEX.match(line)\n            if match:\n                old_start = int(match.group(1))\n                old_count = int(match.group(2)) if match.group(2) is not None else 1\n                new_start = int(match.group(3))\n                new_count = int(match.group(4)) if match.group(4) is not None else 1\n                current_hunk_header = (old_start, old_count, new_start, new_count)\n                current_hunk_lines = [line]\n        elif current_hunk_header is not None:\n            current_hunk_lines.append(line)\n\n    flush_hunk()\n    return hunks",
+      "embedding_id": "19"
+    },
+    {
+      "file_path": "src/core/diff_parser.py",
+      "function_name": "flush_hunk",
+      "class_name": null,
+      "language": "python",
+      "start_line": 42,
+      "end_line": 80,
+      "code_snippet": "def flush_hunk():\n        nonlocal current_hunk_header, current_hunk_lines\n        if not current_hunk_header or not current_file_path:\n            return\n\n        lang = detect_language(current_file_path)\n        if not lang:\n            current_hunk_header = None\n            current_hunk_lines = []\n            return\n\n        old_start, old_count, new_start, new_count = current_hunk_header\n        new_end = new_start + max(new_count - 1, 0)\n        hunk_content = \"\\n\".join(current_hunk_lines)\n\n        # Classify change type\n        if file_change_type:\n            c_type = file_change_type\n        elif old_start == 0 and old_count == 0:\n            c_type = ChangeType.ADDED\n        elif new_start == 0 and new_count == 0:\n            c_type = ChangeType.DELETED\n        else:\n            c_type = ChangeType.MODIFIED\n\n        hunks.append(\n            DiffHunk(\n                file_path=current_file_path,\n                language=lang,\n                change_type=c_type,\n                old_start=old_start,\n                new_start=new_start,\n                new_end=new_end,\n                diff_content=hunk_content,\n                affected_functions=[],\n            )\n        )\n        current_hunk_header = None\n        current_hunk_lines = []",
+      "embedding_id": "20"
+    },
+    {
+      "file_path": "src/core/diff_parser.py",
+      "function_name": "extract_diff_from_repo",
+      "class_name": null,
+      "language": "python",
+      "start_line": 121,
+      "end_line": 125,
+      "code_snippet": "def extract_diff_from_repo(repo_path: str, base_sha: str, head_sha: str) -> list[DiffHunk]:\n    \"\"\"Extract and parse git diff between two SHAs using GitPython.\"\"\"\n    repo = Repo(repo_path)\n    diff_text = repo.git.diff(f\"{base_sha}..{head_sha}\", unified=3)\n    return parse_unified_diff(diff_text)",
+      "embedding_id": "21"
+    },
+    {
+      "file_path": "src/core/diff_parser.py",
+      "function_name": "map_diff_to_functions",
+      "class_name": null,
+      "language": "python",
+      "start_line": 128,
+      "end_line": 149,
+      "code_snippet": "def map_diff_to_functions(\n    hunks: list[DiffHunk],\n    functions_by_file: dict[str, list[FunctionNode]],\n) -> list[DiffHunk]:\n    \"\"\"Correlate diff hunk line ranges with AST FunctionNode boundaries.\n\n    Populates hunk.affected_functions when line spans overlap.\n    \"\"\"\n    for hunk in hunks:\n        funcs = functions_by_file.get(hunk.file_path, [])\n        affected: list[FunctionNode] = []\n        for func in funcs:\n            # Check overlap between [new_start, new_end] and [func.start_line, func.end_line]\n            hunk_start = hunk.new_start\n            hunk_end = max(hunk.new_end, hunk.new_start)\n\n            if max(hunk_start, func.start_line) <= min(hunk_end, func.end_line):\n                affected.append(func)\n\n        hunk.affected_functions = affected\n\n    return hunks",
+      "embedding_id": "22"
+    },
+    {
+      "file_path": "src/core/reviewer.py",
+      "function_name": "__init__",
+      "class_name": "GeminiReviewer",
+      "language": "python",
+      "start_line": 40,
+      "end_line": 53,
+      "code_snippet": "def __init__(\n        self,\n        settings: Optional[Settings] = None,\n        model_name: str = \"gemini-1.5-flash\",\n    ):\n        self.settings = settings or get_settings()\n        self.model_name = model_name\n        self._configured = False\n\n        if self.settings.gemini_api_key:\n            genai.configure(api_key=self.settings.gemini_api_key)\n            self._configured = True\n        else:\n            logger.warning(\"Gemini API key is not configured in settings. Calls will require mocked responses.\")",
+      "embedding_id": "23"
+    },
+    {
+      "file_path": "src/core/reviewer.py",
+      "function_name": "build_prompt",
+      "class_name": "GeminiReviewer",
+      "language": "python",
+      "start_line": 55,
+      "end_line": 99,
+      "code_snippet": "def build_prompt(\n        self,\n        diff_hunks: list[DiffHunk],\n        retrieval_results: list[RetrievalResult],\n    ) -> str:\n        \"\"\"Construct the prompt combining PR diff hunks and retrieved codebase context.\"\"\"\n        prompt_parts: list[str] = [\n            \"# PULL REQUEST REVIEW REQUEST\\n\",\n            \"## 1. PULL REQUEST DIFF HUNKS TO REVIEW\\n\",\n        ]\n\n        if not diff_hunks:\n            prompt_parts.append(\"No diff hunks provided.\\n\")\n        else:\n            for idx, hunk in enumerate(diff_hunks, start=1):\n                prompt_parts.append(\n                    f\"### Hunk {idx}: {hunk.file_path} ({hunk.change_type.value})\\n\"\n                    f\"- Language: {hunk.language.value}\\n\"\n                    f\"- New Line Range: {hunk.new_start} to {hunk.new_end}\\n\"\n                    f\"```\\n{hunk.diff_content}\\n```\\n\"\n                )\n\n        prompt_parts.append(\"\\n## 2. RELEVANT CODEBASE CONTEXT (SIMILAR FUNCTIONS)\\n\")\n        if not retrieval_results:\n            prompt_parts.append(\"No related codebase context retrieved from vector index.\\n\")\n        else:\n            for res in retrieval_results:\n                q_func = res.query_function\n                prompt_parts.append(\n                    f\"### Context for modified function `{q_func.function_name}` in `{q_func.file_path}`:\\n\"\n                )\n                if not res.similar_functions:\n                    prompt_parts.append(\"  (No similar functions found)\\n\")\n                for sim, score in zip(res.similar_functions, res.similarity_scores):\n                    prompt_parts.append(\n                        f\"  - **{sim.function_name}** in `{sim.file_path}` (similarity score: {score:.3f}):\\n\"\n                        f\"    ```\\n    {sim.code_snippet.strip()}\\n    ```\\n\"\n                    )\n\n        prompt_parts.append(\n            \"\\n## 3. REQUIRED OUTPUT\\n\"\n            \"Produce a JSON array of `ReviewComment` objects analyzing the diff hunks above.\\n\"\n        )\n\n        return \"\\n\".join(prompt_parts)",
+      "embedding_id": "24"
+    },
+    {
+      "file_path": "src/core/reviewer.py",
+      "function_name": "parse_review_response",
+      "class_name": "GeminiReviewer",
+      "language": "python",
+      "start_line": 101,
+      "end_line": 129,
+      "code_snippet": "def parse_review_response(self, raw_text: str) -> list[ReviewComment]:\n        \"\"\"Extract and validate ReviewComment objects from raw Gemini output.\"\"\"\n        cleaned = raw_text.strip()\n\n        # Strip markdown code blocks if present\n        if cleaned.startswith(\"```\"):\n            cleaned = re.sub(r\"^```(?:json)?\\s*\", \"\", cleaned)\n            cleaned = re.sub(r\"\\s*```$\", \"\", cleaned)\n            cleaned = cleaned.strip()\n\n        try:\n            data = json.loads(cleaned)\n        except json.JSONDecodeError as e:\n            logger.error(\"Failed to parse Gemini output as JSON: %s\\nRaw output: %s\", e, raw_text)\n            return []\n\n        if not isinstance(data, list):\n            logger.error(\"Expected JSON list of review comments, got %s\", type(data))\n            return []\n\n        comments: list[ReviewComment] = []\n        for item in data:\n            try:\n                comment = ReviewComment.model_validate(item)\n                comments.append(comment)\n            except Exception as e:\n                logger.warning(\"Skipping invalid review comment entry (%s): %s\", item, e)\n\n        return comments",
+      "embedding_id": "25"
+    },
+    {
+      "file_path": "src/core/reviewer.py",
+      "function_name": "generate_review",
+      "class_name": "GeminiReviewer",
+      "language": "python",
+      "start_line": 131,
+      "end_line": 154,
+      "code_snippet": "def generate_review(\n        self,\n        diff_hunks: list[DiffHunk],\n        retrieval_results: list[RetrievalResult],\n    ) -> list[ReviewComment]:\n        \"\"\"Call Gemini model with assembled prompt and return validated review comments.\"\"\"\n        if not self._configured:\n            logger.error(\"GeminiReviewer called without configured GEMINI_API_KEY.\")\n            return []\n\n        prompt = self.build_prompt(diff_hunks, retrieval_results)\n\n        try:\n            model = genai.GenerativeModel(\n                model_name=self.model_name,\n                system_instruction=REVIEWER_SYSTEM_PROMPT,\n                generation_config={\"response_mime_type\": \"application/json\"},\n            )\n            response = model.generate_content(prompt)\n            raw_text = response.text or \"\"\n            return self.parse_review_response(raw_text)\n        except Exception as e:\n            logger.error(\"Gemini API generation failed: %s\", e, exc_info=True)\n            return []",
+      "embedding_id": "26"
+    },
+    {
+      "file_path": "src/services/incremental_indexer.py",
+      "function_name": "__init__",
+      "class_name": "IncrementalIndexer",
+      "language": "python",
+      "start_line": 23,
+      "end_line": 31,
+      "code_snippet": "def __init__(\n        self,\n        index_manager: IndexManager,\n        storage_client: Optional[StorageClient] = None,\n        settings: Optional[Settings] = None,\n    ):\n        self.settings = settings or get_settings()\n        self.index_manager = index_manager\n        self.storage_client = storage_client or StorageClient(settings=self.settings)",
+      "embedding_id": "27"
+    },
+    {
+      "file_path": "src/services/incremental_indexer.py",
+      "function_name": "update_for_diff_hunks",
+      "class_name": "IncrementalIndexer",
+      "language": "python",
+      "start_line": 33,
+      "end_line": 115,
+      "code_snippet": "def update_for_diff_hunks(\n        self,\n        diff_hunks: list[DiffHunk],\n        embed_fn: Optional[Callable[[list[str]], np.ndarray]] = None,\n        repo_name: Optional[str] = None,\n    ) -> int:\n        \"\"\"Update index metadata and vector embeddings for all functions affected by diff hunks.\n\n        Returns the number of functions successfully updated or added.\n        \"\"\"\n        if not self.index_manager.is_loaded or self.index_manager.index is None:\n            logger.warning(\"IncrementalIndexer invoked on uninitialized index.\")\n            return 0\n\n        target_repo = repo_name or self.settings.target_repo\n        updated_count = 0\n\n        for hunk in diff_hunks:\n            for func in hunk.affected_functions:\n                # 1. Update metadata in memory\n                current_nodes = self.index_manager.metadata.get(\"nodes\", [])\n                node_idx = None\n\n                # Find if node already exists by file_path and function_name\n                for idx, item in enumerate(current_nodes):\n                    if isinstance(item, dict):\n                        f_path = item.get(\"file_path\")\n                        f_name = item.get(\"function_name\")\n                    else:\n                        f_path = item.file_path\n                        f_name = item.function_name\n\n                    if f_path == func.file_path and f_name == func.function_name:\n                        node_idx = idx\n                        break\n\n                if hunk.change_type == ChangeType.DELETED:\n                    if node_idx is not None:\n                        logger.info(\"Marking deleted function: %s in %s\", func.function_name, func.file_path)\n                        if isinstance(current_nodes[node_idx], dict):\n                            current_nodes[node_idx][\"deleted\"] = True\n                        updated_count += 1\n                    continue\n\n                # For ADDED or MODIFIED:\n                if node_idx is not None:\n                    # Update existing record\n                    if isinstance(current_nodes[node_idx], dict):\n                        current_nodes[node_idx][\"code_snippet\"] = func.code_snippet\n                        current_nodes[node_idx][\"start_line\"] = func.start_line\n                        current_nodes[node_idx][\"end_line\"] = func.end_line\n                    updated_count += 1\n                else:\n                    # Append new function node\n                    new_idx = len(current_nodes)\n                    func.embedding_id = str(new_idx)\n                    current_nodes.append(func.model_dump())\n                    node_idx = new_idx\n                    updated_count += 1\n\n                # 2. Vector embedding update\n                if embed_fn is not None:\n                    vec = embed_fn([func.code_snippet]).astype(np.float32)\n                    if vec.ndim == 1:\n                        vec = vec.reshape(1, -1)\n\n                    if vec.shape[1] == self.index_manager.dimension:\n                        self.index_manager.index.add(vec)\n                        logger.debug(\"Added vector for function %s to FAISS index.\", func.function_name)\n\n        # 3. Persist updated index and metadata snapshot to local cache\n        idx_p, meta_p = self.storage_client.get_local_paths(target_repo)\n        idx_p.parent.mkdir(parents=True, exist_ok=True)\n\n        try:\n            faiss.write_index(self.index_manager.index, str(idx_p))\n            with open(meta_p, \"w\", encoding=\"utf-8\") as f:\n                json.dump(self.index_manager.metadata, f, indent=2)\n            logger.info(\"Successfully persisted incremental update (%d functions) to %s\", updated_count, idx_p)\n        except Exception as e:\n            logger.error(\"Failed to persist incremental index snapshot: %s\", e)\n\n        return updated_count",
+      "embedding_id": "28"
+    },
+    {
+      "file_path": "src/services/incremental_indexer.py",
+      "function_name": "sync_on_merge",
+      "class_name": "IncrementalIndexer",
+      "language": "python",
+      "start_line": 117,
+      "end_line": 141,
+      "code_snippet": "def sync_on_merge(\n        self,\n        repo_path: str,\n        base_sha: str,\n        head_sha: str,\n        embed_fn: Optional[Callable[[list[str]], np.ndarray]] = None,\n    ) -> int:\n        \"\"\"Extract merged commits diff and incrementally update codebase vector index.\"\"\"\n        hunks = extract_diff_from_repo(repo_path, base_sha, head_sha)\n        if not hunks:\n            return 0\n\n        ast_parser = ASTParser()\n        functions_by_file = {}\n        for hunk in hunks:\n            full_p = Path(repo_path) / hunk.file_path\n            if full_p.exists():\n                code = full_p.read_text(encoding=\"utf-8\", errors=\"ignore\")\n                nodes = ast_parser.extract_function_nodes(code, hunk.file_path, hunk.language)\n                functions_by_file[hunk.file_path] = nodes\n            else:\n                functions_by_file[hunk.file_path] = []\n\n        hunks = map_diff_to_functions(hunks, functions_by_file)\n        return self.update_for_diff_hunks(hunks, embed_fn=embed_fn)",
+      "embedding_id": "29"
+    },
+    {
+      "file_path": "src/services/github_client.py",
+      "function_name": "__init__",
+      "class_name": "GitHubClient",
+      "language": "python",
+      "start_line": 16,
+      "end_line": 33,
+      "code_snippet": "def __init__(\n        self,\n        settings: Optional[Settings] = None,\n        token: Optional[str] = None,\n        max_retries: int = 3,\n        backoff_factor: float = 1.0,\n    ):\n        self.settings = settings or get_settings()\n        self.token = token or self.settings.github_token\n        self.max_retries = max_retries\n        self.backoff_factor = backoff_factor\n\n        if self.token:\n            auth = Auth.Token(self.token)\n            self.gh = Github(auth=auth)\n        else:\n            logger.warning(\"GitHubClient initialized without token. Unauthenticated rate limits will apply.\")\n            self.gh = Github()",
+      "embedding_id": "30"
+    },
+    {
+      "file_path": "src/services/github_client.py",
+      "function_name": "get_pull_request",
+      "class_name": "GitHubClient",
+      "language": "python",
+      "start_line": 35,
+      "end_line": 37,
+      "code_snippet": "def get_pull_request(self, repo_full_name: str, pr_number: int):\n        \"\"\"Fetch repository and pull request instance with retry logic.\"\"\"\n        return self._execute_with_retry(lambda: self.gh.get_repo(repo_full_name).get_pull(pr_number))",
+      "embedding_id": "31"
+    },
+    {
+      "file_path": "src/services/github_client.py",
+      "function_name": "format_comment_body",
+      "class_name": "GitHubClient",
+      "language": "python",
+      "start_line": 39,
+      "end_line": 56,
+      "code_snippet": "def format_comment_body(self, comment: ReviewComment) -> str:\n        \"\"\"Format the markdown body for an inline review comment.\"\"\"\n        severity_badges = {\n            \"info\": \"\ud83d\udca1 **Info**\",\n            \"warning\": \"\u26a0\ufe0f **Warning**\",\n            \"critical\": \"\ud83d\udea8 **Critical**\",\n        }\n        badge = severity_badges.get(comment.severity.value, \"\ud83d\udd0d **CodeLens**\")\n        parts = [\n            f\"{badge} (Lines {comment.start_line}\u2013{comment.end_line})\\n\",\n            comment.body,\n        ]\n\n        if comment.retrieved_context_refs:\n            refs = \", \".join(f\"`{r}`\" for r in comment.retrieved_context_refs)\n            parts.append(f\"\\n\\n*Codebase context referenced from:* {refs}\")\n\n        return \"\\n\".join(parts)",
+      "embedding_id": "32"
+    },
+    {
+      "file_path": "src/services/github_client.py",
+      "function_name": "post_single_comment",
+      "class_name": "GitHubClient",
+      "language": "python",
+      "start_line": 58,
+      "end_line": 98,
+      "code_snippet": "def post_single_comment(\n        self,\n        repo_full_name: str,\n        pr_number: int,\n        commit_id: str,\n        comment: ReviewComment,\n    ) -> Optional[int]:\n        \"\"\"Post a single review comment. Falls back to an issue comment if outside diff lines.\"\"\"\n        pull = self.get_pull_request(repo_full_name, pr_number)\n        formatted_body = self.format_comment_body(comment)\n\n        try:\n            # Try posting as inline review comment on the commit diff\n            created = self._execute_with_retry(\n                lambda: pull.create_review_comment(\n                    body=formatted_body,\n                    commit_id=commit_id,\n                    path=comment.file_path,\n                    line=comment.end_line,\n                )\n            )\n            logger.info(\"Posted inline review comment %s on %s#%d\", created.id, repo_full_name, pr_number)\n            return created.id\n\n        except GithubException as exc:\n            # 422: Line is not part of the PR diff or invalid position\n            if exc.status == 422:\n                logger.warning(\n                    \"Inline review comment rejected by GitHub (422) for %s:%d. Falling back to issue comment.\",\n                    comment.file_path,\n                    comment.end_line,\n                )\n                fallback_body = (\n                    f\"**[CodeLens Review]** on `{comment.file_path}` (lines {comment.start_line}\u2013{comment.end_line}):\\n\\n\"\n                    f\"{formatted_body}\"\n                )\n                fallback_comment = self._execute_with_retry(lambda: pull.create_issue_comment(fallback_body))\n                return fallback_comment.id\n\n            logger.error(\"Failed to post comment to %s#%d: %s\", repo_full_name, pr_number, exc)\n            return None",
+      "embedding_id": "33"
+    },
+    {
+      "file_path": "src/services/github_client.py",
+      "function_name": "post_review_comments",
+      "class_name": "GitHubClient",
+      "language": "python",
+      "start_line": 100,
+      "end_line": 113,
+      "code_snippet": "def post_review_comments(\n        self,\n        repo_full_name: str,\n        pr_number: int,\n        commit_id: str,\n        comments: list[ReviewComment],\n    ) -> list[int]:\n        \"\"\"Post a batch of review comments to a pull request.\"\"\"\n        comment_ids: list[int] = []\n        for comment in comments:\n            cid = self.post_single_comment(repo_full_name, pr_number, commit_id, comment)\n            if cid is not None:\n                comment_ids.append(cid)\n        return comment_ids",
+      "embedding_id": "34"
+    },
+    {
+      "file_path": "src/services/github_client.py",
+      "function_name": "get_comment_reactions",
+      "class_name": "GitHubClient",
+      "language": "python",
+      "start_line": 115,
+      "end_line": 120,
+      "code_snippet": "def get_comment_reactions(self, repo_full_name: str, comment_id: int) -> list[dict[str, Any]]:\n        \"\"\"Fetch list of reactions on a review comment.\"\"\"\n        repo = self._execute_with_retry(lambda: self.gh.get_repo(repo_full_name))\n        comment = self._execute_with_retry(lambda: repo.get_pull_review_comment(comment_id))\n        reactions = self._execute_with_retry(lambda: list(comment.get_reactions()))\n        return [{\"content\": r.content, \"user\": r.user.login} for r in reactions]",
+      "embedding_id": "35"
+    },
+    {
+      "file_path": "src/services/github_client.py",
+      "function_name": "_execute_with_retry",
+      "class_name": "GitHubClient",
+      "language": "python",
+      "start_line": 122,
+      "end_line": 143,
+      "code_snippet": "def _execute_with_retry(self, operation):\n        \"\"\"Execute a PyGithub operation with exponential backoff on rate limits.\"\"\"\n        last_exception = None\n        for attempt in range(self.max_retries):\n            try:\n                return operation()\n            except RateLimitExceededException as exc:\n                wait_time = (self.backoff_factor * (2**attempt))\n                logger.warning(\"GitHub rate limit hit on attempt %d. Backing off for %.1fs...\", attempt + 1, wait_time)\n                time.sleep(wait_time)\n                last_exception = exc\n            except GithubException as exc:\n                if exc.status == 403 and \"rate limit\" in str(exc.data).lower():\n                    wait_time = (self.backoff_factor * (2**attempt))\n                    logger.warning(\"GitHub 403 rate limit on attempt %d. Backing off for %.1fs...\", attempt + 1, wait_time)\n                    time.sleep(wait_time)\n                    last_exception = exc\n                else:\n                    raise\n\n        if last_exception:\n            raise last_exception",
+      "embedding_id": "36"
+    },
+    {
+      "file_path": "src/services/storage_client.py",
+      "function_name": "__init__",
+      "class_name": "StorageClient",
+      "language": "python",
+      "start_line": 16,
+      "end_line": 28,
+      "code_snippet": "def __init__(\n        self,\n        settings: Optional[Settings] = None,\n        base_cache_dir: Optional[Union[str, Path]] = None,\n    ):\n        self.settings = settings or get_settings()\n        if base_cache_dir:\n            self.base_cache_dir = Path(base_cache_dir)\n        else:\n            self.base_cache_dir = Path(self.settings.local_index_path).parent\n\n        self.base_cache_dir.mkdir(parents=True, exist_ok=True)\n        self.gcs_bucket_name = self.settings.gcs_bucket",
+      "embedding_id": "37"
+    },
+    {
+      "file_path": "src/services/storage_client.py",
+      "function_name": "_sanitize_repo_name",
+      "class_name": "StorageClient",
+      "language": "python",
+      "start_line": 30,
+      "end_line": 32,
+      "code_snippet": "def _sanitize_repo_name(self, repo_name: str) -> str:\n        \"\"\"Sanitize repo name for safe local directory naming.\"\"\"\n        return repo_name.replace(\"/\", \"__\").replace(\"\\\\\", \"__\")",
+      "embedding_id": "38"
+    },
+    {
+      "file_path": "src/services/storage_client.py",
+      "function_name": "get_local_paths",
+      "class_name": "StorageClient",
+      "language": "python",
+      "start_line": 34,
+      "end_line": 40,
+      "code_snippet": "def get_local_paths(self, repo_name: str) -> tuple[Path, Path]:\n        \"\"\"Return the local paths for index binary and metadata JSON for a repository.\"\"\"\n        safe_name = self._sanitize_repo_name(repo_name)\n        repo_dir = self.base_cache_dir / safe_name\n        index_path = repo_dir / \"faiss_index.bin\"\n        metadata_path = repo_dir / \"metadata.json\"\n        return index_path, metadata_path",
+      "embedding_id": "39"
+    },
+    {
+      "file_path": "src/services/storage_client.py",
+      "function_name": "index_exists",
+      "class_name": "StorageClient",
+      "language": "python",
+      "start_line": 42,
+      "end_line": 50,
+      "code_snippet": "def index_exists(self, repo_name: str) -> bool:\n        \"\"\"Check whether local index and metadata files exist and are non-empty.\"\"\"\n        index_path, metadata_path = self.get_local_paths(repo_name)\n        return (\n            index_path.exists()\n            and metadata_path.exists()\n            and index_path.stat().st_size > 0\n            and metadata_path.stat().st_size > 0\n        )",
+      "embedding_id": "40"
+    },
+    {
+      "file_path": "src/services/storage_client.py",
+      "function_name": "save_index_data",
+      "class_name": "StorageClient",
+      "language": "python",
+      "start_line": 52,
+      "end_line": 74,
+      "code_snippet": "def save_index_data(\n        self,\n        repo_name: str,\n        index_bytes: bytes,\n        metadata_dict: dict[str, Any],\n    ) -> tuple[Path, Path]:\n        \"\"\"Save raw index bytes and metadata dictionary to the local cache directory.\"\"\"\n        index_path, metadata_path = self.get_local_paths(repo_name)\n        index_path.parent.mkdir(parents=True, exist_ok=True)\n\n        with open(index_path, \"wb\") as f:\n            f.write(index_bytes)\n\n        with open(metadata_path, \"w\", encoding=\"utf-8\") as f:\n            json.dump(metadata_dict, f, indent=2)\n\n        logger.info(\n            \"Saved vector index and metadata for '%s' to local cache (%s, %s)\",\n            repo_name,\n            index_path,\n            metadata_path,\n        )\n        return index_path, metadata_path",
+      "embedding_id": "41"
+    },
+    {
+      "file_path": "src/services/storage_client.py",
+      "function_name": "load_metadata",
+      "class_name": "StorageClient",
+      "language": "python",
+      "start_line": 76,
+      "end_line": 86,
+      "code_snippet": "def load_metadata(self, repo_name: str) -> Optional[dict[str, Any]]:\n        \"\"\"Load and return the metadata dictionary for a repository if present.\"\"\"\n        _, metadata_path = self.get_local_paths(repo_name)\n        if not metadata_path.exists():\n            return None\n        try:\n            with open(metadata_path, \"r\", encoding=\"utf-8\") as f:\n                return json.load(f)\n        except Exception as e:\n            logger.warning(\"Failed to parse metadata JSON at %s: %s\", metadata_path, e)\n            return None",
+      "embedding_id": "42"
+    },
+    {
+      "file_path": "src/services/storage_client.py",
+      "function_name": "download_index",
+      "class_name": "StorageClient",
+      "language": "python",
+      "start_line": 88,
+      "end_line": 121,
+      "code_snippet": "def download_index(\n        self,\n        repo_name: str,\n        force_download: bool = False,\n    ) -> tuple[Optional[Path], Optional[Path]]:\n        \"\"\"Download or retrieve index binary and metadata for a repository.\n\n        Attempts remote GCS download if configured; falls back gracefully to local cache.\n        Returns (index_path, metadata_path) if available, or (None, None) if missing.\n        \"\"\"\n        index_path, metadata_path = self.get_local_paths(repo_name)\n\n        # Check local cache first unless force_download requested\n        if not force_download and self.index_exists(repo_name):\n            logger.info(\"Using cached vector index for '%s' at %s\", repo_name, index_path)\n            return index_path, metadata_path\n\n        # Attempt remote GCS download if storage SDK is available and configured\n        downloaded = self._try_gcs_download(repo_name, index_path, metadata_path)\n        if downloaded:\n            return index_path, metadata_path\n\n        # Fallback to local cache if present\n        if self.index_exists(repo_name):\n            logger.info(\"Remote download not available; using local cache for '%s'\", repo_name)\n            return index_path, metadata_path\n\n        # Graceful handling of missing index\n        logger.warning(\n            \"Vector index snapshot for repo '%s' was not found in remote storage (gs://%s) or local cache.\",\n            repo_name,\n            self.gcs_bucket_name,\n        )\n        return None, None",
+      "embedding_id": "43"
+    },
+    {
+      "file_path": "src/services/storage_client.py",
+      "function_name": "upload_index",
+      "class_name": "StorageClient",
+      "language": "python",
+      "start_line": 123,
+      "end_line": 151,
+      "code_snippet": "def upload_index(\n        self,\n        repo_name: str,\n        index_path: Union[str, Path],\n        metadata_path: Union[str, Path],\n    ) -> bool:\n        \"\"\"Upload index and metadata to local cache and remote storage (if configured).\"\"\"\n        idx_src = Path(index_path)\n        meta_src = Path(metadata_path)\n\n        if not idx_src.exists() or not meta_src.exists():\n            logger.error(\n                \"Cannot upload missing index files: index=%s, metadata=%s\",\n                idx_src,\n                meta_src,\n            )\n            return False\n\n        # Copy to local cache directory\n        target_idx, target_meta = self.get_local_paths(repo_name)\n        target_idx.parent.mkdir(parents=True, exist_ok=True)\n        if idx_src.resolve() != target_idx.resolve():\n            shutil.copy2(idx_src, target_idx)\n        if meta_src.resolve() != target_meta.resolve():\n            shutil.copy2(meta_src, target_meta)\n\n        # Attempt remote GCS upload\n        self._try_gcs_upload(repo_name, target_idx, target_meta)\n        return True",
+      "embedding_id": "44"
+    },
+    {
+      "file_path": "src/services/storage_client.py",
+      "function_name": "_try_gcs_download",
+      "class_name": "StorageClient",
+      "language": "python",
+      "start_line": 153,
+      "end_line": 186,
+      "code_snippet": "def _try_gcs_download(self, repo_name: str, index_dest: Path, meta_dest: Path) -> bool:\n        \"\"\"Attempt to download index from Google Cloud Storage using GCS client if available.\"\"\"\n        try:\n            from google.cloud import storage  # type: ignore\n\n            client = storage.Client()\n            bucket = client.bucket(self.gcs_bucket_name)\n\n            remote_idx_blob = bucket.blob(f\"indices/{repo_name}/faiss_index.bin\")\n            remote_meta_blob = bucket.blob(f\"indices/{repo_name}/metadata.json\")\n\n            if not remote_idx_blob.exists() or not remote_meta_blob.exists():\n                return False\n\n            index_dest.parent.mkdir(parents=True, exist_ok=True)\n            remote_idx_blob.download_to_filename(str(index_dest))\n            remote_meta_blob.download_to_filename(str(meta_dest))\n\n            logger.info(\n                \"Successfully downloaded index from gs://%s/indices/%s/\",\n                self.gcs_bucket_name,\n                repo_name,\n            )\n            return True\n        except ImportError:\n            # GCS SDK not installed, standard local fallback\n            return False\n        except Exception as e:\n            logger.warning(\n                \"Remote GCS download failed for repo '%s' (%s). Falling back to local cache.\",\n                repo_name,\n                e,\n            )\n            return False",
+      "embedding_id": "45"
+    },
+    {
+      "file_path": "src/services/storage_client.py",
+      "function_name": "_try_gcs_upload",
+      "class_name": "StorageClient",
+      "language": "python",
+      "start_line": 188,
+      "end_line": 216,
+      "code_snippet": "def _try_gcs_upload(self, repo_name: str, index_src: Path, meta_src: Path) -> bool:\n        \"\"\"Attempt to upload index to Google Cloud Storage using GCS client if available.\"\"\"\n        try:\n            from google.cloud import storage  # type: ignore\n\n            client = storage.Client()\n            bucket = client.bucket(self.gcs_bucket_name)\n\n            remote_idx_blob = bucket.blob(f\"indices/{repo_name}/faiss_index.bin\")\n            remote_meta_blob = bucket.blob(f\"indices/{repo_name}/metadata.json\")\n\n            remote_idx_blob.upload_from_filename(str(index_src))\n            remote_meta_blob.upload_from_filename(str(meta_src))\n\n            logger.info(\n                \"Successfully uploaded index to gs://%s/indices/%s/\",\n                self.gcs_bucket_name,\n                repo_name,\n            )\n            return True\n        except ImportError:\n            return False\n        except Exception as e:\n            logger.warning(\n                \"Remote GCS upload failed for repo '%s' (%s). Local copy retained.\",\n                repo_name,\n                e,\n            )\n            return False",
+      "embedding_id": "46"
+    },
+    {
+      "file_path": "src/services/index_manager.py",
+      "function_name": "__init__",
+      "class_name": "IndexManager",
+      "language": "python",
+      "start_line": 19,
+      "end_line": 29,
+      "code_snippet": "def __init__(\n        self,\n        settings: Optional[Settings] = None,\n        storage_client: Optional[StorageClient] = None,\n    ):\n        self.settings = settings or get_settings()\n        self.storage_client = storage_client or StorageClient(settings=self.settings)\n        self.index: Optional[faiss.Index] = None\n        self.metadata: Optional[dict[str, Any]] = None\n        self._nodes_by_index: dict[int, FunctionNode] = {}\n        self._nodes_by_embedding_id: dict[str, FunctionNode] = {}",
+      "embedding_id": "47"
+    },
+    {
+      "file_path": "src/services/index_manager.py",
+      "function_name": "is_loaded",
+      "class_name": "IndexManager",
+      "language": "python",
+      "start_line": 32,
+      "end_line": 34,
+      "code_snippet": "def is_loaded(self) -> bool:\n        \"\"\"Return True if FAISS index is loaded into memory and ready for queries.\"\"\"\n        return self.index is not None",
+      "embedding_id": "48"
+    },
+    {
+      "file_path": "src/services/index_manager.py",
+      "function_name": "total_vectors",
+      "class_name": "IndexManager",
+      "language": "python",
+      "start_line": 37,
+      "end_line": 41,
+      "code_snippet": "def total_vectors(self) -> int:\n        \"\"\"Return the number of indexed vectors in the active FAISS index.\"\"\"\n        if self.index is not None:\n            return self.index.ntotal\n        return 0",
+      "embedding_id": "49"
+    },
+    {
+      "file_path": "src/services/index_manager.py",
+      "function_name": "dimension",
+      "class_name": "IndexManager",
+      "language": "python",
+      "start_line": 44,
+      "end_line": 48,
+      "code_snippet": "def dimension(self) -> int:\n        \"\"\"Return the vector dimension of the active FAISS index.\"\"\"\n        if self.index is not None:\n            return self.index.d\n        return 0",
+      "embedding_id": "50"
+    },
+    {
+      "file_path": "src/services/index_manager.py",
+      "function_name": "load_index",
+      "class_name": "IndexManager",
+      "language": "python",
+      "start_line": 50,
+      "end_line": 135,
+      "code_snippet": "def load_index(\n        self,\n        index_path: Optional[Union[str, Path]] = None,\n        metadata_path: Optional[Union[str, Path]] = None,\n        repo_name: Optional[str] = None,\n    ) -> bool:\n        \"\"\"Load FAISS index binary and metadata JSON into memory.\n\n        If explicit paths are not provided, attempts download/cache resolution via StorageClient.\n        Returns False and logs warning if files are missing or corrupted.\n        \"\"\"\n        resolved_repo = repo_name or self.settings.target_repo\n\n        if not index_path or not metadata_path:\n            idx_p, meta_p = self.storage_client.download_index(resolved_repo)\n            if not idx_p or not meta_p:\n                logger.warning(\n                    \"Unable to load index for '%s': index snapshot not found.\",\n                    resolved_repo,\n                )\n                return False\n            index_path = idx_p\n            metadata_path = meta_p\n\n        idx_file = Path(index_path)\n        meta_file = Path(metadata_path)\n\n        if not idx_file.exists() or not meta_file.exists():\n            logger.warning(\n                \"Missing index or metadata files: index=%s, metadata=%s\",\n                idx_file,\n                meta_file,\n            )\n            return False\n\n        try:\n            # Load FAISS index\n            loaded_index = faiss.read_index(str(idx_file))\n\n            # Load metadata JSON\n            with open(meta_file, \"r\", encoding=\"utf-8\") as f:\n                loaded_metadata = json.load(f)\n\n            # Build node lookup tables\n            nodes_by_idx: dict[int, FunctionNode] = {}\n            nodes_by_emb_id: dict[str, FunctionNode] = {}\n\n            raw_nodes = loaded_metadata.get(\"nodes\", [])\n            if isinstance(raw_nodes, list):\n                for idx, node_data in enumerate(raw_nodes):\n                    node = FunctionNode.model_validate(node_data)\n                    nodes_by_idx[idx] = node\n                    if node.embedding_id:\n                        nodes_by_emb_id[str(node.embedding_id)] = node\n                    else:\n                        nodes_by_emb_id[str(idx)] = node\n            elif isinstance(raw_nodes, dict):\n                for k, node_data in raw_nodes.items():\n                    node = FunctionNode.model_validate(node_data)\n                    idx = int(k) if k.isdigit() else len(nodes_by_idx)\n                    nodes_by_idx[idx] = node\n                    if node.embedding_id:\n                        nodes_by_emb_id[str(node.embedding_id)] = node\n                    nodes_by_emb_id[str(k)] = node\n\n            self.index = loaded_index\n            self.metadata = loaded_metadata\n            self._nodes_by_index = nodes_by_idx\n            self._nodes_by_embedding_id = nodes_by_emb_id\n\n            logger.info(\n                \"Loaded FAISS index with %d vectors (dimension: %d) and %d metadata nodes from %s\",\n                self.total_vectors,\n                self.dimension,\n                len(self._nodes_by_index),\n                idx_file,\n            )\n            return True\n\n        except Exception as e:\n            logger.error(\"Failed to load FAISS index from %s: %s\", idx_file, e, exc_info=True)\n            self.index = None\n            self.metadata = None\n            self._nodes_by_index.clear()\n            self._nodes_by_embedding_id.clear()\n            return False",
+      "embedding_id": "51"
+    },
+    {
+      "file_path": "src/services/index_manager.py",
+      "function_name": "get_function_node",
+      "class_name": "IndexManager",
+      "language": "python",
+      "start_line": 137,
+      "end_line": 139,
+      "code_snippet": "def get_function_node(self, index_id: int) -> Optional[FunctionNode]:\n        \"\"\"Lookup FunctionNode by its vector row index in FAISS.\"\"\"\n        return self._nodes_by_index.get(index_id)",
+      "embedding_id": "52"
+    },
+    {
+      "file_path": "src/services/index_manager.py",
+      "function_name": "get_node_by_embedding_id",
+      "class_name": "IndexManager",
+      "language": "python",
+      "start_line": 141,
+      "end_line": 143,
+      "code_snippet": "def get_node_by_embedding_id(self, embedding_id: str) -> Optional[FunctionNode]:\n        \"\"\"Lookup FunctionNode by its string embedding_id.\"\"\"\n        return self._nodes_by_embedding_id.get(str(embedding_id))",
+      "embedding_id": "53"
+    },
+    {
+      "file_path": "src/services/index_manager.py",
+      "function_name": "reconstruct_vector",
+      "class_name": "IndexManager",
+      "language": "python",
+      "start_line": 145,
+      "end_line": 153,
+      "code_snippet": "def reconstruct_vector(self, index_id: int) -> Optional[np.ndarray]:\n        \"\"\"Reconstruct the original embedding vector from FAISS if supported.\"\"\"\n        if self.index is None or index_id < 0 or index_id >= self.total_vectors:\n            return None\n        try:\n            return self.index.reconstruct(index_id)\n        except Exception as e:\n            logger.warning(\"Could not reconstruct vector %d: %s\", index_id, e)\n            return None",
+      "embedding_id": "54"
+    },
+    {
+      "file_path": "src/services/index_manager.py",
+      "function_name": "query",
+      "class_name": "IndexManager",
+      "language": "python",
+      "start_line": 155,
+      "end_line": 198,
+      "code_snippet": "def query(\n        self,\n        embedding: np.ndarray,\n        top_k: int = 5,\n    ) -> tuple[list[FunctionNode], list[float]]:\n        \"\"\"Query FAISS index for nearest neighbors of the provided embedding.\n\n        Returns a tuple of (matched_function_nodes, similarity_scores).\n        \"\"\"\n        if not self.is_loaded or self.index is None or self.total_vectors == 0:\n            logger.warning(\"Query executed against uninitialized or empty FAISS index.\")\n            return [], []\n\n        # Prepare 2D float32 array\n        vec = np.asarray(embedding, dtype=np.float32)\n        if vec.ndim == 1:\n            vec = vec.reshape(1, -1)\n\n        if vec.shape[1] != self.dimension:\n            logger.error(\n                \"Query vector dimension mismatch: expected %d, got %d\",\n                self.dimension,\n                vec.shape[1],\n            )\n            return [], []\n\n        k = min(top_k, self.total_vectors)\n        if k <= 0:\n            return [], []\n\n        distances, indices = self.index.search(vec, k)\n\n        matched_nodes: list[FunctionNode] = []\n        matched_scores: list[float] = []\n\n        for dist, idx in zip(distances[0], indices[0]):\n            if idx < 0:\n                continue  # FAISS returns -1 for unfilled neighbor slots\n            node = self.get_function_node(int(idx))\n            if node:\n                matched_nodes.append(node)\n                matched_scores.append(float(dist))\n\n        return matched_nodes, matched_scores",
+      "embedding_id": "55"
+    },
+    {
+      "file_path": "src/api/webhooks.py",
+      "function_name": "get_index_manager",
+      "class_name": null,
+      "language": "python",
+      "start_line": 27,
+      "end_line": 33,
+      "code_snippet": "def get_index_manager() -> IndexManager:\n    global _index_manager\n    if _index_manager is None:\n        _index_manager = IndexManager()\n        # Attempt initial load\n        _index_manager.load_index()\n    return _index_manager",
+      "embedding_id": "56"
+    },
+    {
+      "file_path": "src/api/webhooks.py",
+      "function_name": "process_pr_review_pipeline",
+      "class_name": null,
+      "language": "python",
+      "start_line": 44,
+      "end_line": 119,
+      "code_snippet": "def process_pr_review_pipeline(\n    pr_event: PREvent,\n    diff_text: Optional[str] = None,\n    repo_path: Optional[str] = None,\n    settings: Optional[Settings] = None,\n    index_mgr: Optional[IndexManager] = None,\n    reviewer: Optional[GeminiReviewer] = None,\n    gh_client: Optional[GitHubClient] = None,\n) -> list[int]:\n    \"\"\"Execute the end-to-end PR review pipeline.\n\n    Stages:\n    1. Extract diff hunks (from provided diff_text or local git repo)\n    2. Parse AST function nodes and map line spans to diff hunks\n    3. Retrieve similar codebase functions from FAISS vector index\n    4. Call Gemini LLM to generate structured review comments\n    5. Post inline review comments via GitHub client\n    \"\"\"\n    settings = settings or get_settings()\n    index_mgr = index_mgr or get_index_manager()\n    reviewer = reviewer or GeminiReviewer(settings=settings)\n    gh_client = gh_client or GitHubClient(settings=settings)\n\n    # Stage 1: Extract Diffs\n    hunks = []\n    if diff_text:\n        hunks = parse_unified_diff(diff_text)\n    elif repo_path:\n        try:\n            hunks = extract_diff_from_repo(repo_path, pr_event.base_sha, pr_event.head_sha)\n        except Exception as e:\n            logger.warning(\"Failed to extract git diff from repo %s: %s\", repo_path, e)\n\n    if not hunks:\n        logger.info(\"No parseable diff hunks for PR #%d in %s\", pr_event.pr_number, pr_event.repo_full_name)\n        return []\n\n    # Stage 2: AST Parsing & Diff-to-AST Mapping\n    ast_parser = ASTParser()\n    functions_by_file = {}\n    for hunk in hunks:\n        if hunk.file_path not in functions_by_file:\n            # If repo_path is available, parse file content from disk\n            if repo_path:\n                try:\n                    full_p = f\"{repo_path}/{hunk.file_path}\"\n                    with open(full_p, \"r\", encoding=\"utf-8\") as f:\n                        code = f.read()\n                    nodes = ast_parser.extract_function_nodes(code, hunk.file_path, hunk.language)\n                    functions_by_file[hunk.file_path] = nodes\n                except Exception as e:\n                    logger.debug(\"Could not parse file %s: %s\", hunk.file_path, e)\n            else:\n                functions_by_file[hunk.file_path] = []\n\n    hunks = map_diff_to_functions(hunks, functions_by_file)\n\n    # Stage 3: Code Retrieval\n    retriever = CodeRetriever(index_manager=index_mgr)\n    retrieval_results = retriever.retrieve_for_hunks(hunks)\n\n    # Stage 4: Gemini Review Generation\n    comments: list[ReviewComment] = reviewer.generate_review(hunks, retrieval_results)\n    if not comments:\n        logger.info(\"No review comments generated for PR #%d\", pr_event.pr_number)\n        return []\n\n    # Stage 5: GitHub Comment Posting\n    comment_ids = gh_client.post_review_comments(\n        repo_full_name=pr_event.repo_full_name,\n        pr_number=pr_event.pr_number,\n        commit_id=pr_event.head_sha,\n        comments=comments,\n    )\n    logger.info(\"Successfully posted %d comments on PR #%d\", len(comment_ids), pr_event.pr_number)\n    return comment_ids",
+      "embedding_id": "57"
+    },
+    {
+      "file_path": "src/api/webhooks.py",
+      "function_name": "github_webhook_endpoint",
+      "class_name": null,
+      "language": "python",
+      "start_line": 123,
+      "end_line": 189,
+      "code_snippet": "async def github_webhook_endpoint(\n    request: Request,\n    x_github_event: Optional[str] = Header(None, alias=\"X-GitHub-Event\"),\n    x_hub_signature_256: Optional[str] = Header(None, alias=\"X-Hub-Signature-256\"),\n) -> WebhookResponse:\n    \"\"\"Receive and process GitHub webhook notifications.\"\"\"\n    settings = get_settings()\n    body_bytes = await request.body()\n\n    # Verify HMAC signature\n    if not verify_webhook_signature(body_bytes, x_hub_signature_256 or \"\", settings.github_webhook_secret):\n        logger.warning(\"Rejected webhook: invalid HMAC signature\")\n        raise HTTPException(\n            status_code=status.HTTP_401_UNAUTHORIZED,\n            detail=\"Invalid webhook signature\",\n        )\n\n    # Filter events: Only process pull_request\n    if x_github_event != \"pull_request\":\n        logger.info(\"Ignoring non-PR GitHub event: %s\", x_github_event)\n        return WebhookResponse(status=\"ignored\", message=f\"Event {x_github_event} ignored\")\n\n    try:\n        payload = json.loads(body_bytes.decode(\"utf-8\"))\n    except json.JSONDecodeError:\n        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=\"Invalid JSON payload\")\n\n    action = payload.get(\"action\")\n    if action not in [\"opened\", \"synchronize\", \"reopened\"]:\n        logger.info(\"Ignoring PR action: %s\", action)\n        return WebhookResponse(status=\"ignored\", message=f\"Action '{action}' ignored\")\n\n    pr_dict = payload.get(\"pull_request\", {})\n    repo_dict = payload.get(\"repository\", {})\n\n    pr_event = PREvent(\n        action=action,\n        pr_number=payload.get(\"number\", pr_dict.get(\"number\", 0)),\n        repo_full_name=repo_dict.get(\"full_name\", \"\"),\n        head_sha=pr_dict.get(\"head\", {}).get(\"sha\", \"\"),\n        base_sha=pr_dict.get(\"base\", {}).get(\"sha\", \"\"),\n        diff_url=pr_dict.get(\"diff_url\", \"\"),\n        sender_login=payload.get(\"sender\", {}).get(\"login\", \"\"),\n    )\n\n    job_id = str(uuid.uuid4())\n    logger.info(\"Processing PR event: %s #%d (job: %s)\", pr_event.repo_full_name, pr_event.pr_number, job_id)\n\n    # Fetch diff text from diff_url if available\n    diff_text = None\n    if pr_event.diff_url:\n        try:\n            async with httpx.AsyncClient(timeout=10.0) as client:\n                resp = await client.get(pr_event.diff_url)\n                if resp.status_code == 200:\n                    diff_text = resp.text\n        except Exception as e:\n            logger.warning(\"Could not fetch diff from %s: %s\", pr_event.diff_url, e)\n\n    posted_ids = process_pr_review_pipeline(pr_event=pr_event, diff_text=diff_text)\n\n    return WebhookResponse(\n        status=\"accepted\",\n        pr_number=pr_event.pr_number,\n        job_id=job_id,\n        comments_posted=len(posted_ids),\n    )",
+      "embedding_id": "58"
+    },
+    {
+      "file_path": "src/api/feedback.py",
+      "function_name": "ingest_feedback",
+      "class_name": null,
+      "language": "python",
+      "start_line": 22,
+      "end_line": 52,
+      "code_snippet": "def ingest_feedback(event: FeedbackEvent) -> FeedbackResponse:\n\n    \"\"\"Ingest developer reaction (+1 or -1) on a CodeLens PR comment.\n\n    Appends the event as a JSON line to the persistent reactions store (feedback.jsonl).\n    \"\"\"\n    cfg = get_settings()\n    store_path = Path(cfg.feedback_store_path)\n\n\n    try:\n        store_path.parent.mkdir(parents=True, exist_ok=True)\n        record = event.model_dump()\n\n        with open(store_path, \"a\", encoding=\"utf-8\") as f:\n            f.write(json.dumps(record) + \"\\n\")\n\n        logger.info(\n            \"Recorded feedback: PR #%d, comment %s, reaction '%s'\",\n            event.pr_number,\n            event.comment_id,\n            event.reaction,\n        )\n        return FeedbackResponse(status=\"recorded\")\n\n    except Exception as e:\n        logger.error(\"Failed to append feedback event: %s\", e, exc_info=True)\n        raise HTTPException(\n            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,\n            detail=\"Failed to record feedback event\",\n        )",
+      "embedding_id": "59"
+    },
+    {
+      "file_path": "src/api/health.py",
+      "function_name": "get_health",
+      "class_name": null,
+      "language": "python",
+      "start_line": 19,
+      "end_line": 33,
+      "code_snippet": "def get_health() -> HealthResponse:\n    settings = get_settings()\n    index_path = settings.local_index_path\n    index_loaded = os.path.exists(index_path)\n\n    index_age_seconds = None\n    if index_loaded:\n        mtime = os.path.getmtime(index_path)\n        index_age_seconds = int(time.time() - mtime)\n\n    return HealthResponse(\n        status=\"ok\",\n        index_loaded=index_loaded,\n        index_age_seconds=index_age_seconds,\n    )",
+      "embedding_id": "60"
+    },
+    {
+      "file_path": "src/api/reviews.py",
+      "function_name": "run_manual_review",
+      "class_name": null,
+      "language": "python",
+      "start_line": 38,
+      "end_line": 105,
+      "code_snippet": "def run_manual_review(\n    req: ManualReviewRequest,\n    settings: Optional[Settings] = None,\n    index_mgr: Optional[IndexManager] = None,\n    reviewer: Optional[GeminiReviewer] = None,\n    gh_client: Optional[GitHubClient] = None,\n) -> ManualReviewResponse:\n    \"\"\"Execute manual review logic with optional injectable dependencies.\"\"\"\n    start_time = time.perf_counter()\n\n    cfg = settings or get_settings()\n    mgr = index_mgr or get_index_manager()\n    rev = reviewer or GeminiReviewer(settings=cfg)\n    gh = gh_client or GitHubClient(settings=cfg)\n\n    diff_content = req.diff_text\n    commit_sha = req.commit_id\n\n    # If diff_text is not supplied, fetch diff from GitHub API using GitHubClient\n    if not diff_content:\n        try:\n            pull = gh.get_pull_request(req.repo_full_name, req.pr_number)\n            if not commit_sha:\n                commit_sha = pull.head.sha\n            # Fetch unified diff\n            diff_content = pull.get_issue_comments() # or diff\n            # PyGithub pull.diff_url or pull.get_files()\n            # For direct diff content, fetch through pull object or diff_url\n            diff_content = getattr(pull, \"diff_url\", \"\")\n        except Exception as e:\n            logger.warning(\"Could not fetch remote PR details for %s#%d: %s\", req.repo_full_name, req.pr_number, e)\n\n    hunks = parse_unified_diff(diff_content) if diff_content else []\n\n    # AST parsing and boundary correlation\n    ast_parser = ASTParser()\n    functions_by_file = {}\n    for hunk in hunks:\n        functions_by_file[hunk.file_path] = []\n\n    hunks = map_diff_to_functions(hunks, functions_by_file)\n\n    # Retrieval of codebase context\n    retriever = CodeRetriever(index_manager=mgr)\n    retrieval_results = retriever.retrieve_for_hunks(hunks)\n\n    # Review comment generation via Gemini\n    comments = rev.generate_review(hunks, retrieval_results)\n\n    posted_count = 0\n    if req.post_to_github and commit_sha and comments:\n        posted_ids = gh.post_review_comments(\n            repo_full_name=req.repo_full_name,\n            pr_number=req.pr_number,\n            commit_id=commit_sha,\n            comments=comments,\n        )\n        posted_count = len(posted_ids)\n\n    elapsed_ms = (time.perf_counter() - start_time) * 1000.0\n\n    return ManualReviewResponse(\n        repo_full_name=req.repo_full_name,\n        pr_number=req.pr_number,\n        comments=comments,\n        comments_posted=posted_count,\n        processing_time_ms=round(elapsed_ms, 2),\n    )",
+      "embedding_id": "61"
+    },
+    {
+      "file_path": "src/api/reviews.py",
+      "function_name": "generate_manual_review",
+      "class_name": null,
+      "language": "python",
+      "start_line": 109,
+      "end_line": 111,
+      "code_snippet": "def generate_manual_review(req: ManualReviewRequest) -> ManualReviewResponse:\n    \"\"\"Trigger an on-demand code review for a PR, bypassing the webhook receiver.\"\"\"\n    return run_manual_review(req)",
+      "embedding_id": "62"
+    },
+    {
+      "file_path": "tests/test_logging.py",
+      "function_name": "test_json_formatter_basic",
+      "class_name": null,
+      "language": "python",
+      "start_line": 6,
+      "end_line": 23,
+      "code_snippet": "def test_json_formatter_basic():\n    formatter = JSONFormatter()\n    record = logging.LogRecord(\n        name=\"test_logger\",\n        level=logging.INFO,\n        pathname=\"test.py\",\n        lineno=10,\n        msg=\"Test message with %s\",\n        args=(\"arg1\",),\n        exc_info=None,\n    )\n    output = formatter.format(record)\n    data = json.loads(output)\n\n    assert data[\"level\"] == \"INFO\"\n    assert data[\"logger\"] == \"test_logger\"\n    assert data[\"message\"] == \"Test message with arg1\"\n    assert \"timestamp\" in data",
+      "embedding_id": "63"
+    },
+    {
+      "file_path": "tests/test_logging.py",
+      "function_name": "test_json_formatter_with_request_id",
+      "class_name": null,
+      "language": "python",
+      "start_line": 26,
+      "end_line": 43,
+      "code_snippet": "def test_json_formatter_with_request_id():\n    formatter = JSONFormatter()\n    token = request_id_ctx.set(\"req-uuid-1234\")\n    try:\n        record = logging.LogRecord(\n            name=\"test_logger\",\n            level=logging.WARNING,\n            pathname=\"test.py\",\n            lineno=20,\n            msg=\"Warning message\",\n            args=(),\n            exc_info=None,\n        )\n        output = formatter.format(record)\n        data = json.loads(output)\n        assert data[\"request_id\"] == \"req-uuid-1234\"\n    finally:\n        request_id_ctx.reset(token)",
+      "embedding_id": "64"
+    },
+    {
+      "file_path": "tests/test_logging.py",
+      "function_name": "test_json_formatter_with_exception",
+      "class_name": null,
+      "language": "python",
+      "start_line": 46,
+      "end_line": 67,
+      "code_snippet": "def test_json_formatter_with_exception():\n    formatter = JSONFormatter()\n    try:\n        raise ValueError(\"Simulated failure\")\n    except ValueError:\n        import sys\n        exc_info = sys.exc_info()\n\n    record = logging.LogRecord(\n        name=\"test_logger\",\n        level=logging.ERROR,\n        pathname=\"test.py\",\n        lineno=30,\n        msg=\"Error occurred\",\n        args=(),\n        exc_info=exc_info,\n    )\n    output = formatter.format(record)\n    data = json.loads(output)\n\n    assert \"exception\" in data\n    assert \"Simulated failure\" in data[\"exception\"]",
+      "embedding_id": "65"
+    },
+    {
+      "file_path": "tests/test_logging.py",
+      "function_name": "test_setup_logging",
+      "class_name": null,
+      "language": "python",
+      "start_line": 70,
+      "end_line": 75,
+      "code_snippet": "def test_setup_logging():\n    setup_logging(log_level=\"DEBUG\")\n    root = logging.getLogger()\n    assert root.level == logging.DEBUG\n    assert len(root.handlers) == 1\n    assert isinstance(root.handlers[0].formatter, JSONFormatter)",
+      "embedding_id": "66"
+    },
+    {
+      "file_path": "tests/test_github_client.py",
+      "function_name": "sample_comment",
+      "class_name": null,
+      "language": "python",
+      "start_line": 11,
+      "end_line": 19,
+      "code_snippet": "def sample_comment() -> ReviewComment:\n    return ReviewComment(\n        file_path=\"src/service.py\",\n        start_line=10,\n        end_line=15,\n        body=\"Consider catching specific exception instead of Exception.\",\n        severity=ReviewSeverity.WARNING,\n        retrieved_context_refs=[\"src/utils/errors.py\"],\n    )",
+      "embedding_id": "67"
+    },
+    {
+      "file_path": "tests/test_github_client.py",
+      "function_name": "test_format_comment_body",
+      "class_name": null,
+      "language": "python",
+      "start_line": 22,
+      "end_line": 29,
+      "code_snippet": "def test_format_comment_body(sample_comment: ReviewComment):\n    client = GitHubClient(token=\"mock-token\")\n    body = client.format_comment_body(sample_comment)\n\n    assert \"\u26a0\ufe0f **Warning**\" in body\n    assert \"Lines 10\u201315\" in body\n    assert \"Consider catching specific exception\" in body\n    assert \"`src/utils/errors.py`\" in body",
+      "embedding_id": "68"
+    },
+    {
+      "file_path": "tests/test_github_client.py",
+      "function_name": "test_post_single_comment_inline_success",
+      "class_name": null,
+      "language": "python",
+      "start_line": 32,
+      "end_line": 45,
+      "code_snippet": "def test_post_single_comment_inline_success(sample_comment: ReviewComment):\n    client = GitHubClient(token=\"mock-token\")\n\n    mock_pull = MagicMock()\n    mock_comment = MagicMock()\n    mock_comment.id = 9999\n    mock_pull.create_review_comment.return_value = mock_comment\n\n    with patch.object(client, \"get_pull_request\", return_value=mock_pull):\n        cid = client.post_single_comment(\"owner/repo\", 42, \"sha123\", sample_comment)\n\n        assert cid == 9999\n        mock_pull.create_review_comment.assert_called_once()\n        mock_pull.create_issue_comment.assert_not_called()",
+      "embedding_id": "69"
+    },
+    {
+      "file_path": "tests/test_github_client.py",
+      "function_name": "test_post_single_comment_fallback_on_422",
+      "class_name": null,
+      "language": "python",
+      "start_line": 48,
+      "end_line": 64,
+      "code_snippet": "def test_post_single_comment_fallback_on_422(sample_comment: ReviewComment):\n    client = GitHubClient(token=\"mock-token\")\n\n    mock_pull = MagicMock()\n    # 422 indicates line is not in PR diff\n    err = GithubException(status=422, data={\"message\": \"Validation Failed\"}, headers=None)\n    mock_pull.create_review_comment.side_effect = err\n\n    mock_issue_comment = MagicMock()\n    mock_issue_comment.id = 8888\n    mock_pull.create_issue_comment.return_value = mock_issue_comment\n\n    with patch.object(client, \"get_pull_request\", return_value=mock_pull):\n        cid = client.post_single_comment(\"owner/repo\", 42, \"sha123\", sample_comment)\n\n        assert cid == 8888\n        mock_pull.create_issue_comment.assert_called_once()",
+      "embedding_id": "70"
+    },
+    {
+      "file_path": "tests/test_github_client.py",
+      "function_name": "test_post_review_comments_batch",
+      "class_name": null,
+      "language": "python",
+      "start_line": 67,
+      "end_line": 72,
+      "code_snippet": "def test_post_review_comments_batch(sample_comment: ReviewComment):\n    client = GitHubClient(token=\"mock-token\")\n\n    with patch.object(client, \"post_single_comment\", return_value=101):\n        ids = client.post_review_comments(\"owner/repo\", 42, \"sha123\", [sample_comment, sample_comment])\n        assert ids == [101, 101]",
+      "embedding_id": "71"
+    },
+    {
+      "file_path": "tests/test_github_client.py",
+      "function_name": "test_retry_on_rate_limit",
+      "class_name": null,
+      "language": "python",
+      "start_line": 75,
+      "end_line": 86,
+      "code_snippet": "def test_retry_on_rate_limit(sample_comment: ReviewComment):\n    client = GitHubClient(token=\"mock-token\", max_retries=2, backoff_factor=0.01)\n\n    mock_op = MagicMock()\n    mock_op.side_effect = [\n        RateLimitExceededException(status=403, data={\"message\": \"Rate limit exceeded\"}, headers=None),\n        \"success_result\",\n    ]\n\n    result = client._execute_with_retry(mock_op)\n    assert result == \"success_result\"\n    assert mock_op.call_count == 2",
+      "embedding_id": "72"
+    },
+    {
+      "file_path": "tests/test_feedback.py",
+      "function_name": "temp_env",
+      "class_name": null,
+      "language": "python",
+      "start_line": 16,
+      "end_line": 23,
+      "code_snippet": "def temp_env(tmp_path: Path):\n    feedback_file = tmp_path / \"feedback\" / \"reactions.jsonl\"\n    cfg = Settings(_env_file=None, feedback_store_path=str(feedback_file), gemini_api_key=\"mock-key\")\n    with patch(\"src.api.feedback.get_settings\", return_value=cfg), patch(\n        \"src.api.reviews.get_settings\", return_value=cfg\n    ), patch(\"src.config.get_settings\", return_value=cfg):\n        app = create_app()\n        yield TestClient(app), feedback_file",
+      "embedding_id": "73"
+    },
+    {
+      "file_path": "tests/test_feedback.py",
+      "function_name": "test_ingest_feedback_success",
+      "class_name": null,
+      "language": "python",
+      "start_line": 26,
+      "end_line": 46,
+      "code_snippet": "def test_ingest_feedback_success(temp_env):\n    client, feedback_file = temp_env\n\n    payload = {\n        \"pr_number\": 42,\n        \"comment_id\": \"comment-abc-123\",\n        \"repo_full_name\": \"owner/repo\",\n        \"reaction\": \"+1\",\n        \"timestamp\": \"2026-10-10T12:00:00Z\",\n    }\n\n    response = client.post(\"/feedback\", json=payload)\n    assert response.status_code == 200\n    assert response.json()[\"status\"] == \"recorded\"\n\n    assert feedback_file.exists()\n    lines = feedback_file.read_text(encoding=\"utf-8\").strip().splitlines()\n    assert len(lines) == 1\n    data = json.loads(lines[0])\n    assert data[\"pr_number\"] == 42\n    assert data[\"reaction\"] == \"+1\"",
+      "embedding_id": "74"
+    },
+    {
+      "file_path": "tests/test_feedback.py",
+      "function_name": "test_ingest_multiple_feedback",
+      "class_name": null,
+      "language": "python",
+      "start_line": 49,
+      "end_line": 64,
+      "code_snippet": "def test_ingest_multiple_feedback(temp_env):\n    client, feedback_file = temp_env\n\n    for r in [\"+1\", \"-1\"]:\n        payload = {\n            \"pr_number\": 10,\n            \"comment_id\": f\"cid-{r}\",\n            \"repo_full_name\": \"owner/repo\",\n            \"reaction\": r,\n            \"timestamp\": \"2026-10-10T12:05:00Z\",\n        }\n        resp = client.post(\"/feedback\", json=payload)\n        assert resp.status_code == 200\n\n    lines = feedback_file.read_text(encoding=\"utf-8\").strip().splitlines()\n    assert len(lines) == 2",
+      "embedding_id": "75"
+    },
+    {
+      "file_path": "tests/test_feedback.py",
+      "function_name": "test_manual_review_generate",
+      "class_name": null,
+      "language": "python",
+      "start_line": 67,
+      "end_line": 103,
+      "code_snippet": "def test_manual_review_generate(temp_env):\n    client, _ = temp_env\n\n    diff_text = (\n        \"diff --git a/src/calc.py b/src/calc.py\\n\"\n        \"--- a/src/calc.py\\n\"\n        \"+++ b/src/calc.py\\n\"\n        \"@@ -1,3 +1,4 @@\\n\"\n        \"+def multiply(x, y): return x * y\\n\"\n    )\n\n    mock_reviewer = MagicMock()\n    mock_reviewer.generate_review.return_value = [\n        ReviewComment(\n            file_path=\"src/calc.py\",\n            start_line=1,\n            end_line=2,\n            body=\"Add type hints for arguments.\",\n            severity=ReviewSeverity.INFO,\n        )\n    ]\n\n    with patch(\"src.api.reviews.GeminiReviewer\", return_value=mock_reviewer):\n        req_payload = {\n            \"repo_full_name\": \"owner/repo\",\n            \"pr_number\": 5,\n            \"diff_text\": diff_text,\n            \"post_to_github\": False,\n        }\n        resp = client.post(\"/reviews/generate\", json=req_payload)\n        assert resp.status_code == 200\n        body = resp.json()\n        assert body[\"pr_number\"] == 5\n        assert len(body[\"comments\"]) == 1\n        assert body[\"comments\"][0][\"body\"] == \"Add type hints for arguments.\"\n        assert body[\"comments_posted\"] == 0\n        assert \"processing_time_ms\" in body",
+      "embedding_id": "76"
+    },
+    {
+      "file_path": "tests/test_health.py",
+      "function_name": "test_health_endpoint",
+      "class_name": null,
+      "language": "python",
+      "start_line": 6,
+      "end_line": 16,
+      "code_snippet": "def test_health_endpoint():\n    app = create_app()\n    client = TestClient(app)\n\n    response = client.get(\"/health\")\n    assert response.status_code == 200\n    data = response.json()\n    assert data[\"status\"] == \"ok\"\n    assert \"index_loaded\" in data\n    assert isinstance(data[\"index_loaded\"], bool)\n    assert \"X-Request-ID\" in response.headers",
+      "embedding_id": "77"
+    },
+    {
+      "file_path": "tests/test_health.py",
+      "function_name": "test_health_with_custom_request_id",
+      "class_name": null,
+      "language": "python",
+      "start_line": 19,
+      "end_line": 26,
+      "code_snippet": "def test_health_with_custom_request_id():\n    app = create_app()\n    client = TestClient(app)\n\n    custom_id = \"test-req-id-789\"\n    response = client.get(\"/health\", headers={\"X-Request-ID\": custom_id})\n    assert response.status_code == 200\n    assert response.headers[\"X-Request-ID\"] == custom_id",
+      "embedding_id": "78"
+    },
+    {
+      "file_path": "tests/test_health.py",
+      "function_name": "test_root_endpoint",
+      "class_name": null,
+      "language": "python",
+      "start_line": 29,
+      "end_line": 38,
+      "code_snippet": "def test_root_endpoint():\n    app = create_app()\n    client = TestClient(app)\n\n    response = client.get(\"/\")\n    assert response.status_code == 200\n    data = response.json()\n    assert data[\"name\"] == \"CodeLens\"\n    assert data[\"status\"] == \"online\"\n    assert data[\"docs\"] == \"/docs\"",
+      "embedding_id": "79"
+    },
+    {
+      "file_path": "tests/test_diff_parser.py",
+      "function_name": "test_detect_language",
+      "class_name": null,
+      "language": "python",
+      "start_line": 37,
+      "end_line": 44,
+      "code_snippet": "def test_detect_language():\n    assert detect_language(\"src/main.py\") == Language.PYTHON\n    assert detect_language(\"web/App.tsx\") == Language.TYPESCRIPT\n    assert detect_language(\"script.js\") == Language.JAVASCRIPT\n    assert detect_language(\"main.go\") == Language.GO\n    assert detect_language(\"Service.java\") == Language.JAVA\n    assert detect_language(\"lib.rs\") == Language.RUST\n    assert detect_language(\"README.md\") is None",
+      "embedding_id": "80"
+    },
+    {
+      "file_path": "tests/test_diff_parser.py",
+      "function_name": "test_parse_unified_diff_single_hunk",
+      "class_name": null,
+      "language": "python",
+      "start_line": 47,
+      "end_line": 57,
+      "code_snippet": "def test_parse_unified_diff_single_hunk():\n    hunks = parse_unified_diff(SAMPLE_DIFF)\n    assert len(hunks) == 1\n    hunk = hunks[0]\n    assert hunk.file_path == \"src/services/payment.py\"\n    assert hunk.language == Language.PYTHON\n    assert hunk.change_type == ChangeType.MODIFIED\n    assert hunk.old_start == 10\n    assert hunk.new_start == 10\n    assert hunk.new_end == 17  # 10 + 8 - 1 = 17\n    assert \"log_audit_event\" in hunk.diff_content",
+      "embedding_id": "81"
+    },
+    {
+      "file_path": "tests/test_diff_parser.py",
+      "function_name": "test_parse_unified_diff_multi_file",
+      "class_name": null,
+      "language": "python",
+      "start_line": 60,
+      "end_line": 74,
+      "code_snippet": "def test_parse_unified_diff_multi_file():\n    hunks = parse_unified_diff(SAMPLE_MULTI_FILE_DIFF)\n    assert len(hunks) == 2\n\n    # Added file\n    added_hunk = hunks[0]\n    assert added_hunk.file_path == \"src/user.py\"\n    assert added_hunk.change_type == ChangeType.ADDED\n    assert added_hunk.language == Language.PYTHON\n\n    # Deleted file\n    del_hunk = hunks[1]\n    assert del_hunk.file_path == \"src/old.ts\"\n    assert del_hunk.change_type == ChangeType.DELETED\n    assert del_hunk.language == Language.TYPESCRIPT",
+      "embedding_id": "82"
+    },
+    {
+      "file_path": "tests/test_diff_parser.py",
+      "function_name": "test_map_diff_to_functions",
+      "class_name": null,
+      "language": "python",
+      "start_line": 77,
+      "end_line": 104,
+      "code_snippet": "def test_map_diff_to_functions():\n    hunks = parse_unified_diff(SAMPLE_DIFF)\n    assert len(hunks) == 1\n\n    fn_inside = FunctionNode(\n        file_path=\"src/services/payment.py\",\n        function_name=\"process_transaction\",\n        language=Language.PYTHON,\n        start_line=8,\n        end_line=20,\n        code_snippet=\"def process_transaction...\",\n    )\n    fn_outside = FunctionNode(\n        file_path=\"src/services/payment.py\",\n        function_name=\"unrelated_helper\",\n        language=Language.PYTHON,\n        start_line=50,\n        end_line=60,\n        code_snippet=\"def unrelated_helper...\",\n    )\n\n    funcs_by_file = {\n        \"src/services/payment.py\": [fn_inside, fn_outside]\n    }\n\n    mapped_hunks = map_diff_to_functions(hunks, funcs_by_file)\n    assert len(mapped_hunks[0].affected_functions) == 1\n    assert mapped_hunks[0].affected_functions[0].function_name == \"process_transaction\"",
+      "embedding_id": "83"
+    },
+    {
+      "file_path": "tests/test_config.py",
+      "function_name": "test_default_settings",
+      "class_name": null,
+      "language": "python",
+      "start_line": 4,
+      "end_line": 9,
+      "code_snippet": "def test_default_settings():\n    settings = Settings(_env_file=None)\n    assert settings.app_env == \"development\"\n    assert settings.port == 8000\n    assert settings.gcs_bucket == \"codelens-storage\"\n    assert settings.target_repo == \"owner/repo\"",
+      "embedding_id": "84"
+    },
+    {
+      "file_path": "tests/test_config.py",
+      "function_name": "test_custom_settings_via_env",
+      "class_name": null,
+      "language": "python",
+      "start_line": 12,
+      "end_line": 22,
+      "code_snippet": "def test_custom_settings_via_env(monkeypatch):\n    monkeypatch.setenv(\"APP_ENV\", \"production\")\n    monkeypatch.setenv(\"PORT\", \"9000\")\n    monkeypatch.setenv(\"GITHUB_TOKEN\", \"test_token_123\")\n    monkeypatch.setenv(\"GEMINI_API_KEY\", \"gemini_key_456\")\n\n    custom_settings = Settings(_env_file=None)\n    assert custom_settings.app_env == \"production\"\n    assert custom_settings.port == 9000\n    assert custom_settings.github_token == \"test_token_123\"\n    assert custom_settings.gemini_api_key == \"gemini_key_456\"",
+      "embedding_id": "85"
+    },
+    {
+      "file_path": "tests/test_config.py",
+      "function_name": "test_get_settings_singleton",
+      "class_name": null,
+      "language": "python",
+      "start_line": 26,
+      "end_line": 29,
+      "code_snippet": "def test_get_settings_singleton():\n    s1 = get_settings()\n    s2 = get_settings()\n    assert s1 is s2",
+      "embedding_id": "86"
+    },
+    {
+      "file_path": "tests/test_enums.py",
+      "function_name": "test_change_type_values",
+      "class_name": null,
+      "language": "python",
+      "start_line": 5,
+      "end_line": 9,
+      "code_snippet": "def test_change_type_values():\n    assert ChangeType.ADDED == \"added\"\n    assert ChangeType.MODIFIED == \"modified\"\n    assert ChangeType.DELETED == \"deleted\"\n    assert isinstance(ChangeType.ADDED, str)",
+      "embedding_id": "87"
+    },
+    {
+      "file_path": "tests/test_enums.py",
+      "function_name": "test_language_values",
+      "class_name": null,
+      "language": "python",
+      "start_line": 12,
+      "end_line": 19,
+      "code_snippet": "def test_language_values():\n    assert Language.PYTHON == \"python\"\n    assert Language.TYPESCRIPT == \"typescript\"\n    assert Language.JAVASCRIPT == \"javascript\"\n    assert Language.GO == \"go\"\n    assert Language.JAVA == \"java\"\n    assert Language.RUST == \"rust\"\n    assert isinstance(Language.PYTHON, str)",
+      "embedding_id": "88"
+    },
+    {
+      "file_path": "tests/test_enums.py",
+      "function_name": "test_review_severity_values",
+      "class_name": null,
+      "language": "python",
+      "start_line": 22,
+      "end_line": 26,
+      "code_snippet": "def test_review_severity_values():\n    assert ReviewSeverity.INFO == \"info\"\n    assert ReviewSeverity.WARNING == \"warning\"\n    assert ReviewSeverity.CRITICAL == \"critical\"\n    assert isinstance(ReviewSeverity.CRITICAL, str)",
+      "embedding_id": "89"
+    },
+    {
+      "file_path": "tests/test_enums.py",
+      "function_name": "test_enum_invalid_value",
+      "class_name": null,
+      "language": "python",
+      "start_line": 29,
+      "end_line": 37,
+      "code_snippet": "def test_enum_invalid_value():\n    with pytest.raises(ValueError):\n        ChangeType(\"invalid_type\")\n\n    with pytest.raises(ValueError):\n        Language(\"unsupported_language\")\n\n    with pytest.raises(ValueError):\n        ReviewSeverity(\"unknown_severity\")",
+      "embedding_id": "90"
+    },
+    {
+      "file_path": "tests/test_webhooks.py",
+      "function_name": "_compute_sig",
+      "class_name": null,
+      "language": "python",
+      "start_line": 6,
+      "end_line": 8,
+      "code_snippet": "def _compute_sig(payload: bytes, secret: str) -> str:\n    mac = hmac.new(secret.encode(\"utf-8\"), payload, hashlib.sha256).hexdigest()\n    return f\"sha256={mac}\"",
+      "embedding_id": "91"
+    },
+    {
+      "file_path": "tests/test_webhooks.py",
+      "function_name": "test_valid_webhook_signature",
+      "class_name": null,
+      "language": "python",
+      "start_line": 11,
+      "end_line": 16,
+      "code_snippet": "def test_valid_webhook_signature():\n    secret = \"super_secret_webhook_key_123\"\n    payload = b'{\"action\": \"opened\", \"number\": 1}'\n    sig = _compute_sig(payload, secret)\n\n    assert verify_webhook_signature(payload, sig, secret) is True",
+      "embedding_id": "92"
+    },
+    {
+      "file_path": "tests/test_webhooks.py",
+      "function_name": "test_invalid_webhook_signature",
+      "class_name": null,
+      "language": "python",
+      "start_line": 19,
+      "end_line": 24,
+      "code_snippet": "def test_invalid_webhook_signature():\n    secret = \"super_secret_webhook_key_123\"\n    payload = b'{\"action\": \"opened\", \"number\": 1}'\n    tampered_sig = \"sha256=0000000000000000000000000000000000000000000000000000000000000000\"\n\n    assert verify_webhook_signature(payload, tampered_sig, secret) is False",
+      "embedding_id": "93"
+    },
+    {
+      "file_path": "tests/test_webhooks.py",
+      "function_name": "test_tampered_payload",
+      "class_name": null,
+      "language": "python",
+      "start_line": 27,
+      "end_line": 33,
+      "code_snippet": "def test_tampered_payload():\n    secret = \"super_secret_webhook_key_123\"\n    payload = b'{\"action\": \"opened\", \"number\": 1}'\n    sig = _compute_sig(payload, secret)\n    tampered_payload = b'{\"action\": \"opened\", \"number\": 2}'\n\n    assert verify_webhook_signature(tampered_payload, sig, secret) is False",
+      "embedding_id": "94"
+    },
+    {
+      "file_path": "tests/test_webhooks.py",
+      "function_name": "test_missing_or_empty_header",
+      "class_name": null,
+      "language": "python",
+      "start_line": 36,
+      "end_line": 42,
+      "code_snippet": "def test_missing_or_empty_header():\n    secret = \"my_secret\"\n    payload = b\"data\"\n\n    assert verify_webhook_signature(payload, None, secret) is False\n    assert verify_webhook_signature(payload, \"\", secret) is False\n    assert verify_webhook_signature(payload, \"invalid_prefix_signature\", secret) is False",
+      "embedding_id": "95"
+    },
+    {
+      "file_path": "tests/test_webhooks.py",
+      "function_name": "test_missing_secret",
+      "class_name": null,
+      "language": "python",
+      "start_line": 45,
+      "end_line": 47,
+      "code_snippet": "def test_missing_secret():\n    payload = b\"data\"\n    assert verify_webhook_signature(payload, \"sha256=123\", \"\") is False",
+      "embedding_id": "96"
+    },
+    {
+      "file_path": "tests/test_incremental_indexer.py",
+      "function_name": "indexer_setup",
+      "class_name": null,
+      "language": "python",
+      "start_line": 17,
+      "end_line": 58,
+      "code_snippet": "def indexer_setup(tmp_path: Path):\n    dim = 4\n    idx = faiss.IndexFlatIP(dim)\n    v0 = np.array([[1.0, 0.0, 0.0, 0.0]], dtype=np.float32)\n    idx.add(v0)\n\n    nodes = [\n        {\n            \"embedding_id\": \"0\",\n            \"file_path\": \"src/utils.py\",\n            \"function_name\": \"helper\",\n            \"language\": \"python\",\n            \"start_line\": 1,\n            \"end_line\": 5,\n            \"code_snippet\": \"def helper(): return 1\",\n        }\n    ]\n\n    metadata = {\n        \"repo_name\": \"test/repo\",\n        \"dimension\": dim,\n        \"nodes\": nodes,\n    }\n\n    settings = Settings(\n        _env_file=None,\n        target_repo=\"test/repo\",\n        local_index_path=str(tmp_path / \"faiss_index.bin\"),\n        local_metadata_path=str(tmp_path / \"metadata.json\"),\n    )\n    storage = StorageClient(settings=settings, base_cache_dir=tmp_path)\n    idx_p, meta_p = storage.get_local_paths(\"test/repo\")\n    idx_p.parent.mkdir(parents=True, exist_ok=True)\n\n    faiss.write_index(idx, str(idx_p))\n    with open(meta_p, \"w\", encoding=\"utf-8\") as f:\n        json.dump(metadata, f)\n\n    mgr = IndexManager(settings=settings, storage_client=storage)\n    mgr.load_index(index_path=idx_p, metadata_path=meta_p)\n\n    return mgr, storage, settings",
+      "embedding_id": "97"
+    },
+    {
+      "file_path": "tests/test_incremental_indexer.py",
+      "function_name": "test_incremental_update_modified_function",
+      "class_name": null,
+      "language": "python",
+      "start_line": 61,
+      "end_line": 87,
+      "code_snippet": "def test_incremental_update_modified_function(indexer_setup):\n    mgr, storage, settings = indexer_setup\n    indexer = IncrementalIndexer(index_manager=mgr, storage_client=storage, settings=settings)\n\n    modified_func = FunctionNode(\n        file_path=\"src/utils.py\",\n        function_name=\"helper\",\n        language=Language.PYTHON,\n        start_line=1,\n        end_line=10,\n        code_snippet=\"def helper(): return 2\",\n    )\n    hunk = DiffHunk(\n        file_path=\"src/utils.py\",\n        language=Language.PYTHON,\n        change_type=ChangeType.MODIFIED,\n        old_start=1,\n        new_start=1,\n        new_end=10,\n        diff_content=\"@@ -1,5 +1,10 @@\",\n        affected_functions=[modified_func],\n    )\n\n    updated = indexer.update_for_diff_hunks([hunk], repo_name=\"test/repo\")\n    assert updated == 1\n    assert mgr.metadata[\"nodes\"][0][\"code_snippet\"] == \"def helper(): return 2\"\n    assert mgr.metadata[\"nodes\"][0][\"end_line\"] == 10",
+      "embedding_id": "98"
+    },
+    {
+      "file_path": "tests/test_incremental_indexer.py",
+      "function_name": "test_incremental_update_new_function",
+      "class_name": null,
+      "language": "python",
+      "start_line": 90,
+      "end_line": 120,
+      "code_snippet": "def test_incremental_update_new_function(indexer_setup):\n    mgr, storage, settings = indexer_setup\n    indexer = IncrementalIndexer(index_manager=mgr, storage_client=storage, settings=settings)\n\n    new_func = FunctionNode(\n        file_path=\"src/new_module.py\",\n        function_name=\"brand_new_feature\",\n        language=Language.PYTHON,\n        start_line=1,\n        end_line=6,\n        code_snippet=\"def brand_new_feature(): pass\",\n    )\n    hunk = DiffHunk(\n        file_path=\"src/new_module.py\",\n        language=Language.PYTHON,\n        change_type=ChangeType.ADDED,\n        old_start=0,\n        new_start=1,\n        new_end=6,\n        diff_content=\"@@ -0,0 +1,6 @@\",\n        affected_functions=[new_func],\n    )\n\n    def dummy_embedder(snippets):\n        return np.array([[0.0, 1.0, 0.0, 0.0]], dtype=np.float32)\n\n    initial_total = mgr.total_vectors\n    updated = indexer.update_for_diff_hunks([hunk], embed_fn=dummy_embedder, repo_name=\"test/repo\")\n    assert updated == 1\n    assert mgr.total_vectors == initial_total + 1\n    assert len(mgr.metadata[\"nodes\"]) == 2",
+      "embedding_id": "99"
+    },
+    {
+      "file_path": "tests/test_incremental_indexer.py",
+      "function_name": "dummy_embedder",
+      "class_name": null,
+      "language": "python",
+      "start_line": 113,
+      "end_line": 114,
+      "code_snippet": "def dummy_embedder(snippets):\n        return np.array([[0.0, 1.0, 0.0, 0.0]], dtype=np.float32)",
+      "embedding_id": "100"
+    },
+    {
+      "file_path": "tests/test_incremental_indexer.py",
+      "function_name": "test_unloaded_index_returns_zero",
+      "class_name": null,
+      "language": "python",
+      "start_line": 123,
+      "end_line": 127,
+      "code_snippet": "def test_unloaded_index_returns_zero():\n    unloaded_mgr = IndexManager()\n    indexer = IncrementalIndexer(index_manager=unloaded_mgr)\n    count = indexer.update_for_diff_hunks([])\n    assert count == 0",
+      "embedding_id": "101"
+    },
+    {
+      "file_path": "tests/test_reviewer.py",
+      "function_name": "sample_diff_hunk",
+      "class_name": null,
+      "language": "python",
+      "start_line": 12,
+      "end_line": 21,
+      "code_snippet": "def sample_diff_hunk() -> DiffHunk:\n    return DiffHunk(\n        file_path=\"src/auth.py\",\n        language=Language.PYTHON,\n        change_type=ChangeType.MODIFIED,\n        old_start=10,\n        new_start=10,\n        new_end=15,\n        diff_content=\"+ def verify_user(user, pwd):\\n+     if not user: return False\",\n    )",
+      "embedding_id": "102"
+    },
+    {
+      "file_path": "tests/test_reviewer.py",
+      "function_name": "sample_retrieval_result",
+      "class_name": null,
+      "language": "python",
+      "start_line": 25,
+      "end_line": 46,
+      "code_snippet": "def sample_retrieval_result() -> RetrievalResult:\n    q = FunctionNode(\n        file_path=\"src/auth.py\",\n        function_name=\"verify_user\",\n        language=Language.PYTHON,\n        start_line=10,\n        end_line=15,\n        code_snippet=\"def verify_user(user, pwd): ...\",\n    )\n    sim = FunctionNode(\n        file_path=\"src/security.py\",\n        function_name=\"validate_credentials\",\n        language=Language.PYTHON,\n        start_line=20,\n        end_line=30,\n        code_snippet=\"def validate_credentials(u, p):\\n    # secure timing comparison\\n    pass\",\n    )\n    return RetrievalResult(\n        query_function=q,\n        similar_functions=[sim],\n        similarity_scores=[0.895],\n    )",
+      "embedding_id": "103"
+    },
+    {
+      "file_path": "tests/test_reviewer.py",
+      "function_name": "test_build_prompt_structure",
+      "class_name": null,
+      "language": "python",
+      "start_line": 49,
+      "end_line": 58,
+      "code_snippet": "def test_build_prompt_structure(sample_diff_hunk: DiffHunk, sample_retrieval_result: RetrievalResult):\n    reviewer = GeminiReviewer(settings=Settings(gemini_api_key=\"mock-key\"))\n    prompt = reviewer.build_prompt([sample_diff_hunk], [sample_retrieval_result])\n\n    assert \"PULL REQUEST DIFF HUNKS TO REVIEW\" in prompt\n    assert \"src/auth.py\" in prompt\n    assert \"verify_user\" in prompt\n    assert \"src/security.py\" in prompt\n    assert \"validate_credentials\" in prompt\n    assert \"0.895\" in prompt",
+      "embedding_id": "104"
+    },
+    {
+      "file_path": "tests/test_reviewer.py",
+      "function_name": "test_parse_clean_json_response",
+      "class_name": null,
+      "language": "python",
+      "start_line": 61,
+      "end_line": 80,
+      "code_snippet": "def test_parse_clean_json_response():\n    reviewer = GeminiReviewer(settings=Settings(gemini_api_key=\"mock-key\"))\n    raw_json = json.dumps(\n        [\n            {\n                \"file_path\": \"src/auth.py\",\n                \"start_line\": 10,\n                \"end_line\": 12,\n                \"body\": \"Use constant time comparison for passwords.\",\n                \"severity\": \"critical\",\n                \"retrieved_context_refs\": [\"src/security.py\"],\n            }\n        ]\n    )\n\n    comments = reviewer.parse_review_response(raw_json)\n    assert len(comments) == 1\n    assert comments[0].file_path == \"src/auth.py\"\n    assert comments[0].severity == ReviewSeverity.CRITICAL\n    assert comments[0].retrieved_context_refs == [\"src/security.py\"]",
+      "embedding_id": "105"
+    },
+    {
+      "file_path": "tests/test_reviewer.py",
+      "function_name": "test_parse_markdown_wrapped_json",
+      "class_name": null,
+      "language": "python",
+      "start_line": 83,
+      "end_line": 97,
+      "code_snippet": "def test_parse_markdown_wrapped_json():\n    reviewer = GeminiReviewer(settings=Settings(gemini_api_key=\"mock-key\"))\n    wrapped = (\n        \"```json\\n\"\n        \"[\\n\"\n        '  {\"file_path\": \"src/main.py\", \"start_line\": 5, \"end_line\": 6, '\n        '   \"body\": \"Missing docstring\", \"severity\": \"info\"}\\n'\n        \"]\\n\"\n        \"```\"\n    )\n\n    comments = reviewer.parse_review_response(wrapped)\n    assert len(comments) == 1\n    assert comments[0].file_path == \"src/main.py\"\n    assert comments[0].severity == ReviewSeverity.INFO",
+      "embedding_id": "106"
+    },
+    {
+      "file_path": "tests/test_reviewer.py",
+      "function_name": "test_parse_malformed_json",
+      "class_name": null,
+      "language": "python",
+      "start_line": 100,
+      "end_line": 103,
+      "code_snippet": "def test_parse_malformed_json():\n    reviewer = GeminiReviewer(settings=Settings(gemini_api_key=\"mock-key\"))\n    comments = reviewer.parse_review_response(\"Not valid JSON {[]}\")\n    assert comments == []",
+      "embedding_id": "107"
+    },
+    {
+      "file_path": "tests/test_reviewer.py",
+      "function_name": "test_generate_review_with_mock",
+      "class_name": null,
+      "language": "python",
+      "start_line": 106,
+      "end_line": 128,
+      "code_snippet": "def test_generate_review_with_mock():\n    reviewer = GeminiReviewer(settings=Settings(gemini_api_key=\"mock-key\"))\n\n    mock_resp = MagicMock()\n    mock_resp.text = json.dumps(\n        [\n            {\n                \"file_path\": \"src/foo.py\",\n                \"start_line\": 1,\n                \"end_line\": 3,\n                \"body\": \"Potential NoneType dereference\",\n                \"severity\": \"warning\",\n            }\n        ]\n    )\n\n    with patch(\"google.generativeai.GenerativeModel\") as mock_model_cls:\n        instance = mock_model_cls.return_value\n        instance.generate_content.return_value = mock_resp\n\n        comments = reviewer.generate_review([], [])\n        assert len(comments) == 1\n        assert comments[0].body == \"Potential NoneType dereference\"",
+      "embedding_id": "108"
+    },
+    {
+      "file_path": "tests/test_webhook_pipeline.py",
+      "function_name": "secret",
+      "class_name": null,
+      "language": "python",
+      "start_line": 17,
+      "end_line": 18,
+      "code_snippet": "def secret() -> str:\n    return \"webhook-test-secret\"",
+      "embedding_id": "109"
+    },
+    {
+      "file_path": "tests/test_webhook_pipeline.py",
+      "function_name": "test_client",
+      "class_name": null,
+      "language": "python",
+      "start_line": 22,
+      "end_line": 28,
+      "code_snippet": "def test_client(secret: str):\n    cfg = Settings(github_webhook_secret=secret, gemini_api_key=\"mock-key\")\n    with patch(\"src.api.webhooks.get_settings\", return_value=cfg), patch(\n        \"src.config.get_settings\", return_value=cfg\n    ):\n        app = create_app()\n        yield TestClient(app)",
+      "embedding_id": "110"
+    },
+    {
+      "file_path": "tests/test_webhook_pipeline.py",
+      "function_name": "sign_payload",
+      "class_name": null,
+      "language": "python",
+      "start_line": 32,
+      "end_line": 35,
+      "code_snippet": "def sign_payload(payload: dict, secret: str) -> tuple[bytes, str]:\n    payload_bytes = json.dumps(payload).encode(\"utf-8\")\n    mac = hmac.new(secret.encode(\"utf-8\"), payload_bytes, hashlib.sha256).hexdigest()\n    return payload_bytes, f\"sha256={mac}\"",
+      "embedding_id": "111"
+    },
+    {
+      "file_path": "tests/test_webhook_pipeline.py",
+      "function_name": "test_webhook_invalid_signature",
+      "class_name": null,
+      "language": "python",
+      "start_line": 38,
+      "end_line": 52,
+      "code_snippet": "def test_webhook_invalid_signature(test_client: TestClient):\n    payload = {\"action\": \"opened\"}\n    payload_bytes = json.dumps(payload).encode(\"utf-8\")\n\n    response = test_client.post(\n        \"/webhook/github\",\n        content=payload_bytes,\n        headers={\n            \"X-GitHub-Event\": \"pull_request\",\n            \"X-Hub-Signature-256\": \"sha256=invalid_signature\",\n            \"Content-Type\": \"application/json\",\n        },\n    )\n    assert response.status_code == 401\n    assert response.json()[\"detail\"] == \"Invalid webhook signature\"",
+      "embedding_id": "112"
+    },
+    {
+      "file_path": "tests/test_webhook_pipeline.py",
+      "function_name": "test_webhook_ignored_event",
+      "class_name": null,
+      "language": "python",
+      "start_line": 55,
+      "end_line": 69,
+      "code_snippet": "def test_webhook_ignored_event(test_client: TestClient, secret: str):\n    payload = {\"zen\": \"Keep it logically awesome.\"}\n    payload_bytes, signature = sign_payload(payload, secret)\n\n    response = test_client.post(\n        \"/webhook/github\",\n        content=payload_bytes,\n        headers={\n            \"X-GitHub-Event\": \"ping\",\n            \"X-Hub-Signature-256\": signature,\n            \"Content-Type\": \"application/json\",\n        },\n    )\n    assert response.status_code == 200\n    assert response.json()[\"status\"] == \"ignored\"",
+      "embedding_id": "113"
+    },
+    {
+      "file_path": "tests/test_webhook_pipeline.py",
+      "function_name": "test_webhook_ignored_action",
+      "class_name": null,
+      "language": "python",
+      "start_line": 72,
+      "end_line": 86,
+      "code_snippet": "def test_webhook_ignored_action(test_client: TestClient, secret: str):\n    payload = {\"action\": \"closed\", \"pull_request\": {\"number\": 1}}\n    payload_bytes, signature = sign_payload(payload, secret)\n\n    response = test_client.post(\n        \"/webhook/github\",\n        content=payload_bytes,\n        headers={\n            \"X-GitHub-Event\": \"pull_request\",\n            \"X-Hub-Signature-256\": signature,\n            \"Content-Type\": \"application/json\",\n        },\n    )\n    assert response.status_code == 200\n    assert response.json()[\"status\"] == \"ignored\"",
+      "embedding_id": "114"
+    },
+    {
+      "file_path": "tests/test_webhook_pipeline.py",
+      "function_name": "test_webhook_full_pipeline_success",
+      "class_name": null,
+      "language": "python",
+      "start_line": 89,
+      "end_line": 138,
+      "code_snippet": "def test_webhook_full_pipeline_success(test_client: TestClient, secret: str):\n    payload = {\n        \"action\": \"opened\",\n        \"number\": 42,\n        \"repository\": {\"full_name\": \"org/repo\"},\n        \"pull_request\": {\n            \"number\": 42,\n            \"head\": {\"sha\": \"head123\"},\n            \"base\": {\"sha\": \"base456\"},\n            \"diff_url\": \"https://api.github.com/repos/org/repo/pulls/42.diff\",\n        },\n        \"sender\": {\"login\": \"octocat\"},\n    }\n    payload_bytes, signature = sign_payload(payload, secret)\n\n    diff_fixture = (\n        \"diff --git a/src/app.py b/src/app.py\\n\"\n        \"--- a/src/app.py\\n\"\n        \"+++ b/src/app.py\\n\"\n        \"@@ -10,3 +10,4 @@ def calculate():\\n\"\n        \"+    return 42\\n\"\n    )\n\n    with patch(\"httpx.AsyncClient.get\", new_callable=AsyncMock) as mock_get, patch(\n        \"src.api.webhooks.process_pr_review_pipeline\"\n    ) as mock_pipeline:\n        mock_resp = MagicMock()\n        mock_resp.status_code = 200\n        mock_resp.text = diff_fixture\n        mock_get.return_value = mock_resp\n\n        mock_pipeline.return_value = [101]\n\n\n        response = test_client.post(\n            \"/webhook/github\",\n            content=payload_bytes,\n            headers={\n                \"X-GitHub-Event\": \"pull_request\",\n                \"X-Hub-Signature-256\": signature,\n                \"Content-Type\": \"application/json\",\n            },\n        )\n\n        assert response.status_code == 200\n        body = response.json()\n        assert body[\"status\"] == \"accepted\"\n        assert body[\"pr_number\"] == 42\n        assert body[\"comments_posted\"] == 1\n        assert \"job_id\" in body",
+      "embedding_id": "115"
+    },
+    {
+      "file_path": "tests/test_webhook_pipeline.py",
+      "function_name": "test_process_pr_review_pipeline_direct",
+      "class_name": null,
+      "language": "python",
+      "start_line": 141,
+      "end_line": 183,
+      "code_snippet": "def test_process_pr_review_pipeline_direct():\n    pr_event = PREvent(\n        action=\"opened\",\n        pr_number=7,\n        repo_full_name=\"org/test-repo\",\n        head_sha=\"head999\",\n        base_sha=\"base888\",\n        diff_url=\"\",\n        sender_login=\"tester\",\n    )\n\n    diff_text = (\n        \"diff --git a/src/math.py b/src/math.py\\n\"\n        \"--- a/src/math.py\\n\"\n        \"+++ b/src/math.py\\n\"\n        \"@@ -1,2 +1,3 @@\\n\"\n        \"+def add(a, b): return a + b\\n\"\n    )\n\n    mock_reviewer = MagicMock()\n    mock_reviewer.generate_review.return_value = [\n        ReviewComment(\n            file_path=\"src/math.py\",\n            start_line=1,\n            end_line=2,\n            body=\"Consider type annotations for parameters.\",\n            severity=ReviewSeverity.INFO,\n        )\n    ]\n\n    mock_gh = MagicMock()\n    mock_gh.post_review_comments.return_value = [555]\n\n    comment_ids = process_pr_review_pipeline(\n        pr_event=pr_event,\n        diff_text=diff_text,\n        reviewer=mock_reviewer,\n        gh_client=mock_gh,\n    )\n\n    assert comment_ids == [555]\n    mock_reviewer.generate_review.assert_called_once()\n    mock_gh.post_review_comments.assert_called_once()",
+      "embedding_id": "116"
+    },
+    {
+      "file_path": "tests/test_storage.py",
+      "function_name": "temp_storage",
+      "class_name": null,
+      "language": "python",
+      "start_line": 10,
+      "end_line": 16,
+      "code_snippet": "def temp_storage(tmp_path: Path) -> StorageClient:\n    settings = Settings(\n        local_index_path=str(tmp_path / \"indices\" / \"faiss_index.bin\"),\n        local_metadata_path=str(tmp_path / \"indices\" / \"metadata.json\"),\n        gcs_bucket=\"test-bucket\",\n    )\n    return StorageClient(settings=settings, base_cache_dir=tmp_path / \"indices\")",
+      "embedding_id": "117"
+    },
+    {
+      "file_path": "tests/test_storage.py",
+      "function_name": "test_storage_paths_and_sanitization",
+      "class_name": null,
+      "language": "python",
+      "start_line": 19,
+      "end_line": 23,
+      "code_snippet": "def test_storage_paths_and_sanitization(temp_storage: StorageClient):\n    idx_p, meta_p = temp_storage.get_local_paths(\"my-org/my-repo\")\n    assert \"my-org__my-repo\" in str(idx_p)\n    assert idx_p.name == \"faiss_index.bin\"\n    assert meta_p.name == \"metadata.json\"",
+      "embedding_id": "118"
+    },
+    {
+      "file_path": "tests/test_storage.py",
+      "function_name": "test_missing_index_returns_none",
+      "class_name": null,
+      "language": "python",
+      "start_line": 26,
+      "end_line": 30,
+      "code_snippet": "def test_missing_index_returns_none(temp_storage: StorageClient):\n    idx_p, meta_p = temp_storage.download_index(\"unindexed/repo\")\n    assert idx_p is None\n    assert meta_p is None\n    assert not temp_storage.index_exists(\"unindexed/repo\")",
+      "embedding_id": "119"
+    },
+    {
+      "file_path": "tests/test_storage.py",
+      "function_name": "test_save_and_retrieve_local_index",
+      "class_name": null,
+      "language": "python",
+      "start_line": 33,
+      "end_line": 65,
+      "code_snippet": "def test_save_and_retrieve_local_index(temp_storage: StorageClient):\n    repo = \"test/repo\"\n    dummy_bytes = b\"FAISS_BINARY_DUMMY_DATA\"\n    metadata = {\n        \"repo_name\": repo,\n        \"dimension\": 128,\n        \"nodes\": [\n            {\n                \"file_path\": \"src/app.py\",\n                \"function_name\": \"run\",\n                \"language\": \"python\",\n                \"start_line\": 1,\n                \"end_line\": 5,\n                \"code_snippet\": \"def run(): pass\",\n            }\n        ],\n    }\n\n    idx_path, meta_path = temp_storage.save_index_data(repo, dummy_bytes, metadata)\n    assert idx_path.exists()\n    assert meta_path.exists()\n    assert temp_storage.index_exists(repo)\n\n    # Load metadata\n    loaded_meta = temp_storage.load_metadata(repo)\n    assert loaded_meta is not None\n    assert loaded_meta[\"repo_name\"] == repo\n    assert len(loaded_meta[\"nodes\"]) == 1\n\n    # Download index returns cached paths\n    down_idx, down_meta = temp_storage.download_index(repo)\n    assert down_idx == idx_path\n    assert down_meta == meta_path",
+      "embedding_id": "120"
+    },
+    {
+      "file_path": "tests/test_storage.py",
+      "function_name": "test_upload_missing_files_fails",
+      "class_name": null,
+      "language": "python",
+      "start_line": 68,
+      "end_line": 71,
+      "code_snippet": "def test_upload_missing_files_fails(temp_storage: StorageClient, tmp_path: Path):\n    non_existent = tmp_path / \"nowhere.bin\"\n    success = temp_storage.upload_index(\"test/repo\", non_existent, non_existent)\n    assert success is False",
+      "embedding_id": "121"
+    },
+    {
+      "file_path": "tests/test_storage.py",
+      "function_name": "test_upload_existing_files",
+      "class_name": null,
+      "language": "python",
+      "start_line": 74,
+      "end_line": 82,
+      "code_snippet": "def test_upload_existing_files(temp_storage: StorageClient, tmp_path: Path):\n    src_idx = tmp_path / \"source_faiss.bin\"\n    src_meta = tmp_path / \"source_meta.json\"\n    src_idx.write_bytes(b\"DATA\")\n    src_meta.write_text(json.dumps({\"test\": 123}), encoding=\"utf-8\")\n\n    success = temp_storage.upload_index(\"upload/repo\", src_idx, src_meta)\n    assert success is True\n    assert temp_storage.index_exists(\"upload/repo\")",
+      "embedding_id": "122"
+    },
+    {
+      "file_path": "tests/test_retriever.py",
+      "function_name": "sample_faiss_setup",
+      "class_name": null,
+      "language": "python",
+      "start_line": 16,
+      "end_line": 75,
+      "code_snippet": "def sample_faiss_setup(tmp_path: Path):\n    \"\"\"Create a temporary FAISS index (dimension 4) and metadata with 3 functions.\"\"\"\n    dim = 4\n    index = faiss.IndexFlatIP(dim)\n\n    # 3 normalized vectors\n    v0 = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float32)\n    v1 = np.array([0.9, 0.1, 0.0, 0.0], dtype=np.float32)\n    v2 = np.array([0.0, 0.0, 1.0, 0.0], dtype=np.float32)\n\n    vectors = np.vstack([v0, v1, v2])\n    index.add(vectors)\n\n    nodes = [\n        {\n            \"embedding_id\": \"0\",\n            \"file_path\": \"src/auth.py\",\n            \"function_name\": \"login_user\",\n            \"class_name\": None,\n            \"language\": \"python\",\n            \"start_line\": 10,\n            \"end_line\": 25,\n            \"code_snippet\": \"def login_user(username, password): pass\",\n        },\n        {\n            \"embedding_id\": \"1\",\n            \"file_path\": \"src/auth.py\",\n            \"function_name\": \"authenticate_token\",\n            \"class_name\": None,\n            \"language\": \"python\",\n            \"start_line\": 30,\n            \"end_line\": 45,\n            \"code_snippet\": \"def authenticate_token(token): pass\",\n        },\n        {\n            \"embedding_id\": \"2\",\n            \"file_path\": \"src/db.py\",\n            \"function_name\": \"connect_database\",\n            \"class_name\": None,\n            \"language\": \"python\",\n            \"start_line\": 5,\n            \"end_line\": 15,\n            \"code_snippet\": \"def connect_database(dsn): pass\",\n        },\n    ]\n\n    metadata = {\n        \"repo_name\": \"org/repo\",\n        \"dimension\": dim,\n        \"nodes\": nodes,\n    }\n\n    index_file = tmp_path / \"faiss_index.bin\"\n    metadata_file = tmp_path / \"metadata.json\"\n\n    faiss.write_index(index, str(index_file))\n    with open(metadata_file, \"w\", encoding=\"utf-8\") as f:\n        json.dump(metadata, f)\n\n    return index_file, metadata_file, nodes",
+      "embedding_id": "123"
+    },
+    {
+      "file_path": "tests/test_retriever.py",
+      "function_name": "test_index_manager_unloaded",
+      "class_name": null,
+      "language": "python",
+      "start_line": 78,
+      "end_line": 86,
+      "code_snippet": "def test_index_manager_unloaded():\n    manager = IndexManager()\n    assert not manager.is_loaded\n    assert manager.total_vectors == 0\n    assert manager.dimension == 0\n\n    nodes, scores = manager.query(np.array([1.0, 0.0], dtype=np.float32))\n    assert nodes == []\n    assert scores == []",
+      "embedding_id": "124"
+    },
+    {
+      "file_path": "tests/test_retriever.py",
+      "function_name": "test_index_manager_load_and_query",
+      "class_name": null,
+      "language": "python",
+      "start_line": 89,
+      "end_line": 106,
+      "code_snippet": "def test_index_manager_load_and_query(sample_faiss_setup):\n    index_file, metadata_file, _ = sample_faiss_setup\n    manager = IndexManager()\n\n    success = manager.load_index(index_path=index_file, metadata_path=metadata_file)\n    assert success is True\n    assert manager.is_loaded is True\n    assert manager.dimension == 4\n    assert manager.total_vectors == 3\n\n    # Query with vector identical to v0\n    query_vec = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float32)\n    nodes, scores = manager.query(query_vec, top_k=2)\n\n    assert len(nodes) == 2\n    assert nodes[0].function_name == \"login_user\"\n    assert nodes[1].function_name == \"authenticate_token\"\n    assert scores[0] >= scores[1]",
+      "embedding_id": "125"
+    },
+    {
+      "file_path": "tests/test_retriever.py",
+      "function_name": "test_retriever_query_with_self_exclusion",
+      "class_name": null,
+      "language": "python",
+      "start_line": 109,
+      "end_line": 124,
+      "code_snippet": "def test_retriever_query_with_self_exclusion(sample_faiss_setup):\n    index_file, metadata_file, nodes_data = sample_faiss_setup\n    manager = IndexManager()\n    manager.load_index(index_path=index_file, metadata_path=metadata_file)\n\n    retriever = CodeRetriever(index_manager=manager)\n\n    query_func = FunctionNode.model_validate(nodes_data[0])\n    result: RetrievalResult = retriever.retrieve_similar(query_func, top_k=1, exclude_self=True)\n\n    assert isinstance(result, RetrievalResult)\n    assert result.query_function.function_name == \"login_user\"\n    assert len(result.similar_functions) == 1\n    # Node 0 was excluded, so closest neighbor is Node 1\n    assert result.similar_functions[0].function_name == \"authenticate_token\"\n    assert len(result.similarity_scores) == 1",
+      "embedding_id": "126"
+    },
+    {
+      "file_path": "tests/test_retriever.py",
+      "function_name": "test_retriever_unloaded_index",
+      "class_name": null,
+      "language": "python",
+      "start_line": 127,
+      "end_line": 143,
+      "code_snippet": "def test_retriever_unloaded_index():\n    manager = IndexManager()\n    retriever = CodeRetriever(index_manager=manager)\n\n    dummy_func = FunctionNode(\n        file_path=\"foo.py\",\n        function_name=\"bar\",\n        language=Language.PYTHON,\n        start_line=1,\n        end_line=5,\n        code_snippet=\"def bar(): pass\",\n        embedding_id=\"0\",\n    )\n\n    result = retriever.retrieve_similar(dummy_func)\n    assert result.similar_functions == []\n    assert result.similarity_scores == []",
+      "embedding_id": "127"
+    },
+    {
+      "file_path": "tests/test_retriever.py",
+      "function_name": "test_retriever_for_hunks",
+      "class_name": null,
+      "language": "python",
+      "start_line": 146,
+      "end_line": 167,
+      "code_snippet": "def test_retriever_for_hunks(sample_faiss_setup):\n    index_file, metadata_file, nodes_data = sample_faiss_setup\n    manager = IndexManager()\n    manager.load_index(index_path=index_file, metadata_path=metadata_file)\n\n    retriever = CodeRetriever(index_manager=manager)\n\n    func = FunctionNode.model_validate(nodes_data[0])\n    hunk = DiffHunk(\n        file_path=\"src/auth.py\",\n        language=Language.PYTHON,\n        change_type=ChangeType.MODIFIED,\n        old_start=12,\n        new_start=12,\n        new_end=15,\n        diff_content=\"@@ -12,2 +12,3 @@\",\n        affected_functions=[func],\n    )\n\n    results = retriever.retrieve_for_hunks([hunk], top_k=2)\n    assert len(results) == 1\n    assert results[0].query_function.function_name == \"login_user\"",
+      "embedding_id": "128"
+    },
+    {
+      "file_path": "tests/test_ast_parser.py",
+      "function_name": "test_parse_python_functions_and_methods",
+      "class_name": null,
+      "language": "python",
+      "start_line": 31,
+      "end_line": 50,
+      "code_snippet": "def test_parse_python_functions_and_methods():\n    parser = ASTParser()\n    nodes = parser.parse_source(PYTHON_CODE, \"src/user_service.py\", Language.PYTHON)\n\n    assert len(nodes) == 3\n    func_names = [n.function_name for n in nodes]\n    assert \"__init__\" in func_names\n    assert \"get_user_by_id\" in func_names\n    assert \"standalone_helper\" in func_names\n\n    method_node = next(n for n in nodes if n.function_name == \"get_user_by_id\")\n    assert method_node.class_name == \"UserService\"\n    assert method_node.language == Language.PYTHON\n    assert method_node.start_line == 5\n    assert method_node.end_line == 6\n\n    standalone_node = next(n for n in nodes if n.function_name == \"standalone_helper\")\n    assert standalone_node.class_name is None\n    assert standalone_node.start_line == 8\n    assert standalone_node.end_line == 9",
+      "embedding_id": "129"
+    },
+    {
+      "file_path": "tests/test_ast_parser.py",
+      "function_name": "test_parse_typescript_functions_and_methods",
+      "class_name": null,
+      "language": "python",
+      "start_line": 53,
+      "end_line": 65,
+      "code_snippet": "def test_parse_typescript_functions_and_methods():\n    parser = ASTParser()\n    nodes = parser.parse_source(TYPESCRIPT_CODE, \"src/auth.ts\", Language.TYPESCRIPT)\n\n    assert len(nodes) == 3\n    func_names = [n.function_name for n in nodes]\n    assert \"login\" in func_names\n    assert \"verifyToken\" in func_names\n    assert \"formatUser\" in func_names\n\n    method_node = next(n for n in nodes if n.function_name == \"login\")\n    assert method_node.class_name == \"AuthService\"\n    assert method_node.language == Language.TYPESCRIPT",
+      "embedding_id": "130"
+    },
+    {
+      "file_path": "tests/test_ast_parser.py",
+      "function_name": "test_parse_empty_or_unsupported",
+      "class_name": null,
+      "language": "python",
+      "start_line": 68,
+      "end_line": 71,
+      "code_snippet": "def test_parse_empty_or_unsupported():\n    parser = ASTParser()\n    nodes = parser.parse_source(\"SELECT * FROM users;\", \"query.sql\", Language.GO)\n    assert nodes == []",
+      "embedding_id": "131"
+    },
+    {
+      "file_path": "tests/test_schemas.py",
+      "function_name": "test_function_node_creation",
+      "class_name": null,
+      "language": "python",
+      "start_line": 15,
+      "end_line": 27,
+      "code_snippet": "def test_function_node_creation():\n    node = FunctionNode(\n        file_path=\"src/api/health.py\",\n        function_name=\"health_check\",\n        language=Language.PYTHON,\n        start_line=10,\n        end_line=25,\n        code_snippet=\"def health_check(): return {'status': 'ok'}\",\n    )\n    assert node.class_name is None\n    assert node.embedding_id is None\n    assert node.function_name == \"health_check\"\n    assert node.language == Language.PYTHON",
+      "embedding_id": "132"
+    },
+    {
+      "file_path": "tests/test_schemas.py",
+      "function_name": "test_diff_hunk_with_affected_functions",
+      "class_name": null,
+      "language": "python",
+      "start_line": 30,
+      "end_line": 50,
+      "code_snippet": "def test_diff_hunk_with_affected_functions():\n    func = FunctionNode(\n        file_path=\"src/main.py\",\n        function_name=\"create_app\",\n        language=Language.PYTHON,\n        start_line=1,\n        end_line=20,\n        code_snippet=\"def create_app(): pass\",\n    )\n    hunk = DiffHunk(\n        file_path=\"src/main.py\",\n        language=Language.PYTHON,\n        change_type=ChangeType.MODIFIED,\n        old_start=5,\n        new_start=5,\n        new_end=15,\n        diff_content=\"@@ -5,5 +5,10 @@\",\n        affected_functions=[func],\n    )\n    assert len(hunk.affected_functions) == 1\n    assert hunk.affected_functions[0].function_name == \"create_app\"",
+      "embedding_id": "133"
+    },
+    {
+      "file_path": "tests/test_schemas.py",
+      "function_name": "test_pr_event_model",
+      "class_name": null,
+      "language": "python",
+      "start_line": 53,
+      "end_line": 64,
+      "code_snippet": "def test_pr_event_model():\n    event = PREvent(\n        action=\"opened\",\n        pr_number=42,\n        repo_full_name=\"octocat/Hello-World\",\n        head_sha=\"6dcb09b5b57875f334f61aebed695e2e4193db5e\",\n        base_sha=\"0000000000000000000000000000000000000000\",\n        diff_url=\"https://github.com/octocat/Hello-World/pull/42.diff\",\n        sender_login=\"octocat\",\n    )\n    assert event.pr_number == 42\n    assert event.action == \"opened\"",
+      "embedding_id": "134"
+    },
+    {
+      "file_path": "tests/test_schemas.py",
+      "function_name": "test_retrieval_result_model",
+      "class_name": null,
+      "language": "python",
+      "start_line": 67,
+      "end_line": 90,
+      "code_snippet": "def test_retrieval_result_model():\n    query_fn = FunctionNode(\n        file_path=\"src/query.py\",\n        function_name=\"find_items\",\n        language=Language.PYTHON,\n        start_line=1,\n        end_line=10,\n        code_snippet=\"def find_items(): pass\",\n    )\n    sim_fn = FunctionNode(\n        file_path=\"src/repo.py\",\n        function_name=\"batch_items\",\n        language=Language.PYTHON,\n        start_line=20,\n        end_line=30,\n        code_snippet=\"def batch_items(): pass\",\n    )\n    res = RetrievalResult(\n        query_function=query_fn,\n        similar_functions=[sim_fn],\n        similarity_scores=[0.89],\n    )\n    assert len(res.similar_functions) == 1\n    assert res.similarity_scores[0] == 0.89",
+      "embedding_id": "135"
+    },
+    {
+      "file_path": "tests/test_schemas.py",
+      "function_name": "test_review_comment_model",
+      "class_name": null,
+      "language": "python",
+      "start_line": 93,
+      "end_line": 103,
+      "code_snippet": "def test_review_comment_model():\n    comment = ReviewComment(\n        file_path=\"src/core/parser.py\",\n        start_line=45,\n        end_line=50,\n        body=\"Consider batch fetching instead of single loop queries.\",\n        severity=ReviewSeverity.WARNING,\n        retrieved_context_refs=[\"src/core/batch_parser.py\"],\n    )\n    assert comment.severity == ReviewSeverity.WARNING\n    assert comment.retrieved_context_refs == [\"src/core/batch_parser.py\"]",
+      "embedding_id": "136"
+    },
+    {
+      "file_path": "tests/test_schemas.py",
+      "function_name": "test_feedback_event_model",
+      "class_name": null,
+      "language": "python",
+      "start_line": 106,
+      "end_line": 115,
+      "code_snippet": "def test_feedback_event_model():\n    fb = FeedbackEvent(\n        pr_number=101,\n        comment_id=\"c_987\",\n        repo_full_name=\"org/repo\",\n        reaction=\"+1\",\n        timestamp=\"2026-10-10T12:00:00Z\",\n    )\n    assert fb.reaction == \"+1\"\n    assert fb.pr_number == 101",
+      "embedding_id": "137"
+    },
+    {
+      "file_path": "tests/test_schemas.py",
+      "function_name": "test_validation_errors_on_missing_required_fields",
+      "class_name": null,
+      "language": "python",
+      "start_line": 118,
+      "end_line": 123,
+      "code_snippet": "def test_validation_errors_on_missing_required_fields():\n    with pytest.raises(ValidationError):\n        FunctionNode(\n            file_path=\"test.py\",\n            # missing function_name, language, start_line, end_line, code_snippet\n        )",
+      "embedding_id": "138"
+    }
+  ]
+}

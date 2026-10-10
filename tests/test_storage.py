@@ -1,6 +1,7 @@
 import json
-import pytest
 from pathlib import Path
+
+import pytest
 
 from src.config import Settings
 from src.services.storage_client import StorageClient

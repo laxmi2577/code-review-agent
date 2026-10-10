@@ -1,4 +1,4 @@
-from typing import Optional
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     feedback_store_path: str = "./data/feedback/reactions.jsonl"
 
 
-_settings: Optional[Settings] = None
+_settings: Settings | None = None
 
 
 def get_settings() -> Settings:

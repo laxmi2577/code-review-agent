@@ -1,5 +1,4 @@
 import logging
-from typing import Optional
 
 import numpy as np
 
@@ -19,7 +18,7 @@ class CodeRetriever:
         self,
         query_function: FunctionNode,
         top_k: int = 5,
-        query_embedding: Optional[np.ndarray] = None,
+        query_embedding: np.ndarray | None = None,
         exclude_self: bool = True,
     ) -> RetrievalResult:
         """Retrieve the top-k most similar functions for a given query FunctionNode.
@@ -42,7 +41,7 @@ class CodeRetriever:
             )
 
         # Resolve vector
-        vector: Optional[np.ndarray] = query_embedding
+        vector: np.ndarray | None = query_embedding
         if vector is None and query_function.embedding_id is not None:
             emb_id_str = str(query_function.embedding_id)
             if emb_id_str.isdigit():

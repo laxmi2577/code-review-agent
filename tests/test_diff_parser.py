@@ -95,9 +95,7 @@ def test_map_diff_to_functions():
         code_snippet="def unrelated_helper...",
     )
 
-    funcs_by_file = {
-        "src/services/payment.py": [fn_inside, fn_outside]
-    }
+    funcs_by_file = {"src/services/payment.py": [fn_inside, fn_outside]}
 
     mapped_hunks = map_diff_to_functions(hunks, funcs_by_file)
     assert len(mapped_hunks[0].affected_functions) == 1
